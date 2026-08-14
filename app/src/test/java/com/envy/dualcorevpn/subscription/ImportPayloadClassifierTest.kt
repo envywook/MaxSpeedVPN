@@ -2,6 +2,7 @@ package com.envy.dualcorevpn.subscription
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import kotlin.test.assertFailsWith
 import org.junit.Test
 
 class ImportPayloadClassifierTest {
@@ -47,10 +48,12 @@ class ImportPayloadClassifierTest {
     }
 
     @Test
-    fun `accepts new branded deep link and preserves legacy link`() {
+    fun `accepts only branded deep link`() {
         val encoded = "https%3A%2F%2Fprovider.example%2Fsub"
         assertTrue(ImportPayloadClassifier.classify("maxspeedvpn://add?url=$encoded") is ImportPayload.Subscription)
-        assertTrue(ImportPayloadClassifier.classify("lust://add?url=$encoded") is ImportPayload.Subscription)
+        assertFailsWith<IllegalArgumentException> {
+            ImportPayloadClassifier.classify("lust://add?url=$encoded")
+        }
     }
 
     @Test

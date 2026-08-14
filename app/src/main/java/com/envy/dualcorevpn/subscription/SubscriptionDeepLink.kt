@@ -9,7 +9,7 @@ data class SubscriptionImportRequest(val url: String, val name: String = "")
 object SubscriptionClipboard {
     fun parse(value: CharSequence?): SubscriptionImportRequest? {
         val text = value?.toString()?.trim().orEmpty()
-        if (text.startsWith("lust://", ignoreCase = true) || text.startsWith("maxspeedvpn://", ignoreCase = true)) {
+        if (text.startsWith("maxspeedvpn://", ignoreCase = true)) {
             return SubscriptionDeepLink.parse(text)
         }
         return text.takeIf { it.startsWith("https://") || it.startsWith("http://") }
@@ -20,7 +20,7 @@ object SubscriptionClipboard {
 object SubscriptionDeepLink {
     fun parse(value: String?): SubscriptionImportRequest? = runCatching {
         val uri = URI(value ?: return null)
-        if (uri.scheme?.lowercase() !in setOf("lust", "maxspeedvpn")) return null
+        if (uri.scheme?.lowercase() != "maxspeedvpn") return null
         if (uri.host !in setOf("add", "subscription")) return null
         val query = parseQuery(uri.rawQuery)
         val rawUrl = query["url"] ?: uri.rawPath.orEmpty().removePrefix("/").takeIf(String::isNotBlank) ?: return null

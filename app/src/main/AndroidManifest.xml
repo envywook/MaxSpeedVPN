@@ -36,14 +36,12 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="lust" android:host="add" />
                 <data android:scheme="maxspeedvpn" android:host="add" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="lust" android:host="subscription" />
                 <data android:scheme="maxspeedvpn" android:host="subscription" />
             </intent-filter>
             <intent-filter>
