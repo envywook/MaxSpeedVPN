@@ -116,7 +116,10 @@ class SubscriptionRepository(context: Context) {
         val subscription = (existing ?: Subscription(UUID.randomUUID().toString(), name.ifBlank { hostName(url) }, url))
             .copy(name = name.ifBlank { existing?.name ?: hostName(url) })
         val fetched = fetch(subscription)
-        val enrichedSubscription = subscription.copy(usage = fetched.usage)
+        val enrichedSubscription = subscription.copy(
+            name = fetched.title ?: subscription.name,
+            usage = fetched.usage,
+        )
         synchronized(preferenceLock) {
             val plan = SubscriptionRefreshPlanner.plan(
                 subscriptions = subscriptions(),
@@ -138,7 +141,10 @@ class SubscriptionRepository(context: Context) {
                 subscriptions = subscriptions(),
                 servers = servers(),
                 selectedServerId = selectedServerId(),
-                subscription = subscription.copy(usage = fetched.usage),
+                subscription = subscription.copy(
+                    name = fetched.title ?: subscription.name,
+                    usage = fetched.usage,
+                ),
                 report = fetched.report,
                 updatedAt = System.currentTimeMillis(),
             )
@@ -157,6 +163,7 @@ class SubscriptionRepository(context: Context) {
     private data class FetchedSubscription(
         val report: SubscriptionParser.ParseReport,
         val usage: SubscriptionUsage?,
+        val title: String?,
     )
 
     private suspend fun fetch(subscription: Subscription): FetchedSubscription {
@@ -209,9 +216,10 @@ class SubscriptionRepository(context: Context) {
                 }
             }
                 return FetchedSubscription(
-                report = SubscriptionParser.parseReport(subscription.id, body),
-                usage = SubscriptionUsageParser.parse(connection.getHeaderField("subscription-userinfo")),
-            )
+                    report = SubscriptionParser.parseReport(subscription.id, body),
+                    usage = SubscriptionUsageParser.parse(connection.getHeaderField("subscription-userinfo")),
+                    title = subscriptionTitle(connection.getHeaderField("profile-title")),
+                )
             } finally {
                 connection.disconnect()
             }
@@ -262,6 +270,14 @@ class SubscriptionRepository(context: Context) {
     }
 
     private fun hostName(url: String): String = runCatching { URI(url).host }.getOrNull().orEmpty().ifBlank { "Подписка" }
+
+    private fun subscriptionTitle(value: String?): String? = runCatching {
+        val encoded = value?.trim()?.removePrefix("base64:")?.takeIf(String::isNotBlank) ?: return null
+        val normalized = encoded.replace('-', '+').replace('_', '/').let { it + "=".repeat((4 - it.length % 4) % 4) }
+        String(Base64.decode(normalized, Base64.DEFAULT), StandardCharsets.UTF_8)
+            .trim()
+            .takeIf { it.isNotBlank() && it.length <= 128 && it.none(Char::isISOControl) }
+    }.getOrNull()
 
     private companion object {
         val updateMutex = Mutex()

@@ -216,10 +216,8 @@ internal fun DashboardHeader() {
 internal fun HomeDashboard(
     state: VpnSessionState,
     selected: ServerProfile?,
-    sessionProfile: ServerProfile?,
     servers: List<ServerProfile>,
     subscriptions: List<Subscription>,
-    latency: ServerLatencyResult?,
     onConnect: (String) -> Unit,
     onDisconnect: () -> Unit,
     onSelect: (ServerProfile) -> Unit,
@@ -246,8 +244,6 @@ internal fun HomeDashboard(
                 onClick = { if (connected || busy) onDisconnect() else selected?.let { onConnect(it.config) } },
             )
             Spacer(Modifier.height(26.dp))
-            SessionDetails(state, sessionProfile, rates, latency)
-            if (connected) Spacer(Modifier.height(12.dp))
             ServerSlider(selected, servers, subscriptions, onSelect, onManageSubscriptions)
             Spacer(Modifier.height(8.dp))
         }
@@ -791,14 +787,18 @@ private fun ServerListCard(
         if (items.isEmpty()) Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) { Text("—", color = TextMuted) }
         items.forEach { server ->
             Box {
+            val isSelected = server.id == selected?.id
             Row(
-                modifier = Modifier.fillMaxWidth().combinedClickable(
-                    onClick = { onSelect(server) },
-                    onLongClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        menuServer = server
-                    },
-                ).padding(horizontal = 16.dp, vertical = 14.dp),
+                modifier = Modifier.fillMaxWidth()
+                    .background(if (isSelected) Mint.copy(alpha = .12f) else Color.Transparent)
+                    .combinedClickable(
+                        onClick = { onSelect(server) },
+                        onLongClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            menuServer = server
+                        },
+                    )
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Surface(shape = CircleShape, color = PanelHigh, modifier = Modifier.size(38.dp)) { Box(contentAlignment = Alignment.Center) { Text(serverFlag(server), fontSize = 19.sp) } }

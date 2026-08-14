@@ -87,6 +87,53 @@ class ImportPayloadClassifierTest {
     }
 
     @Test
+    fun `classifies a sing-box profile document with Naive and Mieru outbounds`() {
+        val payload = ImportPayloadClassifier.classify(
+            """{"outbounds":[
+                {"type":"urltest","tag":"select","outbounds":["naive-out","mieru-out"]},
+                {"type":"naive","tag":"naive-out","server":"naive.example","server_port":443,"username":"fixture-user","password":"fixture-password","tls":{"enabled":true,"server_name":"naive.example"}},
+                {"type":"mieru","tag":"mieru-out","server":"mieru.example","server_port":2012,"transport":"TCP","username":"fixture-user","password":"fixture-password","multiplexing":"MULTIPLEXING_HIGH"},
+                {"type":"direct","tag":"direct"}
+            ]}""",
+        ) as ImportPayload.Profiles
+
+        assertEquals(listOf("naive", "mieru"), payload.profiles.map(ServerProfile::protocol))
+        assertEquals(listOf("naive.example", "mieru.example"), payload.profiles.map(ServerProfile::address))
+    }
+
+    @Test
+    fun `classifies a sing-box Mieru outbound with port ranges`() {
+        val payload = ImportPayloadClassifier.classify(
+            """{"outbounds":[{"type":"mieru","tag":"mieru-range","server":"mieru.example","server_ports":["2012-2014","443-443"],"transport":"TCP","username":"fixture-user","password":"fixture-password"}]}""",
+        ) as ImportPayload.Profiles
+
+        assertEquals(1, payload.profiles.size)
+        assertEquals("mieru", payload.profiles.single().protocol)
+        assertEquals(2012, payload.profiles.single().port)
+        assertTrue(payload.profiles.single().config.contains("server_ports"))
+    }
+
+    @Test
+    fun `allows a larger document only through the explicit file import limit`() {
+        val document = """{"outbounds":[{"type":"naive","tag":"naive","server":"naive.example","server_port":443,"username":"fixture-user","password":"fixture-password","tls":{"enabled":true}}],"padding":"${"x".repeat(4_100)}"}"""
+
+        assertTrue(runCatching { ImportPayloadClassifier.classify(document) }.isFailure)
+        assertTrue(
+            ImportPayloadClassifier.classify(document, maxLength = ImportPayloadClassifier.MAX_FILE_LENGTH)
+                is ImportPayload.Profiles,
+        )
+    }
+
+    @Test
+    fun `rejects a sing-box document without supported proxy outbounds`() {
+        val failure = runCatching {
+            ImportPayloadClassifier.classify("""{"outbounds":[{"type":"direct","tag":"direct"}]}""")
+        }.exceptionOrNull()
+
+        assertTrue(failure is IllegalArgumentException)
+    }
+
+    @Test
     fun `QR rejects multiple direct URIs`() {
         val failure = runCatching {
             QrImportClassifier.classify(

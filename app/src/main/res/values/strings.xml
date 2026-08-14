@@ -98,9 +98,10 @@
     <string name="mieru_import_invalid">Invalid or unsupported Mieru link</string>
     <string name="quick_tile_label">MaxSpeedVPN</string>
     <string name="import_link_title">Add subscription or server</string>
-    <string name="import_link_name">Name (optional)</string>
-    <string name="import_link_value">Subscription URL or server URI</string>
+    <string name="import_link_value">Subscription URL, server URI, or sing-box file</string>
     <string name="import_link_clipboard">PASTE FROM CLIPBOARD</string>
+    <string name="import_link_file">IMPORT FILE</string>
+    <string name="import_link_qr">SCAN QR CODE</string>
     <string name="import_link_clipboard_invalid">Clipboard does not contain a supported link</string>
     <string name="import_link_add">ADD</string>
     <string name="server_import_invalid">Invalid or unsupported subscription/server link</string>

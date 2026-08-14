@@ -166,6 +166,18 @@ private val Warning = Color(0xFFFFC66D)
 private val Danger = Color(0xFFFF7280)
 private const val MAX_BACKUP_CHARS = 5_000_000
 
+private fun readImportBounded(reader: java.io.Reader, maxChars: Int = ImportPayloadClassifier.MAX_FILE_LENGTH): String {
+    val result = StringBuilder()
+    val buffer = CharArray(8192)
+    while (true) {
+        val count = reader.read(buffer)
+        if (count < 0) break
+        require(result.length + count <= maxChars) { "Файл импорта слишком большой" }
+        result.append(buffer, 0, count)
+    }
+    return result.toString()
+}
+
 private fun readBackupBounded(reader: java.io.Reader): String {
     val result = StringBuilder()
     val buffer = CharArray(8192)
@@ -233,6 +245,20 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val profileImportLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@registerForActivityResult
+        lifecycleScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    contentResolver.openInputStream(uri)?.bufferedReader()?.use(::readImportBounded)
+                        ?: error("Не удалось открыть файл")
+                }
+            }.onSuccess { value ->
+                handleImportPayload(value, fromFile = true)
+            }.onFailure { message = getString(R.string.server_import_invalid) }
+        }
+    }
+
     private val backupImportLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@registerForActivityResult
         lifecycleScope.launch {
@@ -286,13 +312,14 @@ class MainActivity : ComponentActivity() {
                     pendingSubscriptionImport = pendingSubscriptionImport,
                     onDismissSubscriptionImport = { pendingSubscriptionImport = null },
                     onAddSubscription = ::addSubscription,
+                    onImportProfileFile = { profileImportLauncher.launch(arrayOf("application/json", "text/plain")) },
+                    onScanQr = ::scanQrCode,
                     onUpdateSubscription = ::updateSubscription,
                     onRemoveSubscription = { repository.remove(it); reloadUi++ },
                     onExportBackup = { backupExportLauncher.launch("maxspeedvpn-backup.json") },
                     onImportBackup = { backupImportLauncher.launch(arrayOf("application/json", "text/plain")) },
                     updateStatus = updateStatus,
                     onCheckUpdate = ::checkForUpdate,
-                    onScanQr = ::scanQrCode,
                     vpnSettings = vpnSettings,
                     onSaveVpnSettings = { settings ->
                         settingsRepository.save(settings)
@@ -469,8 +496,13 @@ class MainActivity : ComponentActivity() {
             .onFailure { message = getString(R.string.server_import_invalid) }
     }
 
-    private fun handleImportPayload(source: String) {
-        runCatching { ImportPayloadClassifier.classify(source) }
+    private fun handleImportPayload(source: String, fromFile: Boolean = false) {
+        runCatching {
+            ImportPayloadClassifier.classify(
+                source,
+                maxLength = if (fromFile) ImportPayloadClassifier.MAX_FILE_LENGTH else ImportPayloadClassifier.MAX_LENGTH,
+            )
+        }
             .onSuccess { payload ->
                 when (payload) {
                     is ImportPayload.Subscription -> pendingSubscriptionImport = payload.request
@@ -698,13 +730,14 @@ private fun LustApp(
     pendingSubscriptionImport: SubscriptionImportRequest?,
     onDismissSubscriptionImport: () -> Unit,
     onAddSubscription: (String, String) -> Unit,
+    onImportProfileFile: () -> Unit,
+    onScanQr: () -> Unit,
     onUpdateSubscription: (Subscription) -> Unit,
     onRemoveSubscription: (Subscription) -> Unit,
     onExportBackup: () -> Unit,
     onImportBackup: () -> Unit,
     updateStatus: String,
     onCheckUpdate: () -> Unit,
-    onScanQr: () -> Unit,
     vpnSettings: VpnSettings,
     onSaveVpnSettings: (VpnSettings) -> Unit,
     latencyResults: Map<String, ServerLatencyResult>,
@@ -735,16 +768,11 @@ private fun LustApp(
             ) { activeTab ->
             when (activeTab) {
                 AppTab.HOME -> {
-                    val sessionProfile = (vpnState as? VpnSessionState.Connected)?.server?.let { sessionServer ->
-                        servers.firstOrNull { it.id == sessionServer.profileId }
-                    }
                     HomeDashboard(
                         state = vpnState,
                         selected = selected,
-                        sessionProfile = sessionProfile,
                         servers = servers,
                         subscriptions = subscriptions,
-                        latency = sessionProfile?.let { latencyResults[it.id] },
                         onConnect = onConnect,
                         onDisconnect = onDisconnect,
                         onSelect = onSelect,
@@ -775,6 +803,8 @@ private fun LustApp(
                     loading = loading,
                     onBack = { tab = subscriptionsParent },
                     onAdd = onAddSubscription,
+                    onImportProfileFile = onImportProfileFile,
+                    onScanQr = onScanQr,
                     onUpdate = onUpdateSubscription,
                     onRemove = onRemoveSubscription,
                 )
@@ -882,11 +912,12 @@ private fun LustApp(
     pendingSubscriptionImport?.let { request ->
         AddSubscriptionDialog(
             onDismiss = onDismissSubscriptionImport,
-            initialName = request.name,
             initialUrl = request.url,
-        ) { name, url ->
+            onImportFile = onImportProfileFile,
+            onScanQr = onScanQr,
+        ) { url ->
             onDismissSubscriptionImport()
-            onAddSubscription(name, url)
+            onAddSubscription("", url)
         }
     }
     message?.let { text ->
@@ -957,7 +988,11 @@ private fun ServersScreen(
 private fun SubscriptionsScreen(
     subscriptions: List<Subscription>, loading: Boolean,
     onBack: () -> Unit,
-    onAdd: (String, String) -> Unit, onUpdate: (Subscription) -> Unit, onRemove: (Subscription) -> Unit,
+    onAdd: (String, String) -> Unit,
+    onImportProfileFile: () -> Unit,
+    onScanQr: () -> Unit,
+    onUpdate: (Subscription) -> Unit,
+    onRemove: (Subscription) -> Unit,
 ) {
     var showAdd by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().padding(20.dp)) {
@@ -1033,17 +1068,24 @@ private fun SubscriptionsScreen(
             }
         }
     }
-    if (showAdd) AddSubscriptionDialog(onDismiss = { showAdd = false }) { name, url -> showAdd = false; onAdd(name, url) }
+    if (showAdd) AddSubscriptionDialog(
+        onDismiss = { showAdd = false },
+        onImportFile = { showAdd = false; onImportProfileFile() },
+        onScanQr = { showAdd = false; onScanQr() },
+    ) { url ->
+        showAdd = false
+        onAdd("", url)
+    }
 }
 
 @Composable
 private fun AddSubscriptionDialog(
     onDismiss: () -> Unit,
-    initialName: String = "",
     initialUrl: String = "",
-    onAdd: (String, String) -> Unit,
+    onImportFile: () -> Unit,
+    onScanQr: () -> Unit,
+    onAdd: (String) -> Unit,
 ) {
-    var name by remember(initialName) { mutableStateOf(initialName) }
     var url by remember(initialUrl) { mutableStateOf(initialUrl) }
     var clipboardError by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -1052,7 +1094,6 @@ private fun AddSubscriptionDialog(
         title = { Text(stringResource(R.string.import_link_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(stringResource(R.string.import_link_name)) }, singleLine = true)
                 OutlinedTextField(
                     value = url,
                     onValueChange = { url = it.trim(); clipboardError = false },
@@ -1069,16 +1110,21 @@ private fun AddSubscriptionDialog(
                     val payload = runCatching { ImportPayloadClassifier.classify(raw) }.getOrNull()
                     if (payload == null) clipboardError = true else {
                         url = raw
-                        if (name.isBlank() && payload is ImportPayload.Subscription) name = payload.request.name
                         clipboardError = false
                     }
                 }, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.import_link_clipboard))
                 }
                 if (clipboardError) Text(stringResource(R.string.import_link_clipboard_invalid), color = Danger, fontSize = 12.sp)
+                OutlinedButton(onClick = onImportFile, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.import_link_file))
+                }
+                OutlinedButton(onClick = onScanQr, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.import_link_qr))
+                }
             }
         },
-        confirmButton = { Button(onClick = { onAdd(name.trim(), url.trim()) }, enabled = runCatching { ImportPayloadClassifier.classify(url) }.isSuccess) { Text(stringResource(R.string.import_link_add)) } },
+        confirmButton = { Button(onClick = { onAdd(url.trim()) }, enabled = runCatching { ImportPayloadClassifier.classify(url) }.isSuccess) { Text(stringResource(R.string.import_link_add)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.mieru_import_cancel)) } },
     )
 }
