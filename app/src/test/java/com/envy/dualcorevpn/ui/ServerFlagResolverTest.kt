@@ -25,6 +25,20 @@ class ServerFlagResolverTest {
     }
 
     @Test
+    fun `uses the first explicit flag as the destination and removes it from displayed name`() {
+        val name = "🇺🇸🇷🇺➙🇦🇹➙США"
+
+        assertEquals("🇺🇸", serverFlagFromName(name))
+        assertEquals("🇷🇺 ➙ 🇦🇹 ➙ США", serverDisplayName(name))
+    }
+
+    @Test
+    fun `keeps cascade route after a first destination flag`() {
+        assertEquals("🇫🇮", serverFlagFromName("🇫🇮🇷🇺➙Финляндия TLS"))
+        assertEquals("🇷🇺 ➙ Финляндия TLS", serverDisplayName("🇫🇮🇷🇺➙Финляндия TLS"))
+    }
+
+    @Test
     fun `does not infer country from unrelated fragments`() {
         assertEquals("🌐", serverFlagFromName("Reality Premium"))
         assertEquals("🌐", serverFlagFromName("Stable Canadair"))

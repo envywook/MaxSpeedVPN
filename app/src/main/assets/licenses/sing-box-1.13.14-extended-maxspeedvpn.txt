@@ -16,7 +16,7 @@ https://github.com/shtorm-7/sing-box-extended/tree/v1.13.14-extended-2.5.2
 Commit: ff11f007ec798136a5de258f947a4f34011a37ea
 Upstream: https://github.com/SagerNet/sing-box
 Build provenance and binary checksums:
-https://github.com/envywook/Lust/releases/tag/sing-box-lust-1.13.14-ext2.5.2.1
+https://github.com/envywook/MaxSpeedVPN/releases/tag/sing-box-lust-1.13.14-ext2.5.2.1
 License: https://www.gnu.org/licenses/gpl-3.0.html
 
 Build: Go 1.26.5, Android NDK 28.2.13676358, API 26, CGO enabled.

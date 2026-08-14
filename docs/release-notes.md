@@ -1,3 +1,21 @@
+# MaxSpeedVPN v0.1.24-alpha
+
+## Брендинг и интерфейс
+
+- логотип приложения заменён на кролика на cyan-blue-purple градиенте: adaptive icon, round icon, legacy launcher density assets и Android 12+ splash;
+- исходный проект и GitHub repository переименованы в `MaxSpeedVPN`; CI artifacts, GitHub update endpoint и public documentation используют новое имя;
+- пользовательские классы backup, VPN service и Quick Settings tile переименованы в MaxSpeedVPN;
+- добавлена обратная совместимость для старых ссылок `lust://`, marker старых sing-box конфигураций, старых release asset names и уже сохранённого журнала;
+- имя Android package/applicationId и существующий release certificate сознательно не менялись, поэтому обновление поверх прошлых APK сохраняет данные.
+
+## Исправления подписок
+
+- карточка сервера берёт первый флаг в названии как итоговый и не дублирует его в отображаемом имени;
+- каскад показывается компактно: итоговый флаг отдельно, маршрут — как `🇷🇺 → 🇦🇹 → США`;
+- подписка с лимитом `total=0` отображается как безлимитная (`∞`), а не «из 0 Б».
+
+---
+
 # MaxSpeedVPN v0.1.23-alpha
 
 ## Подписки и выбор сервера

@@ -12,7 +12,7 @@ No `LICENSE` or `COPYING` file exists in the inspected Git tree. Copyright there
 
 ## Feature map
 
-| Nimbo area/evidence | Android value for Lust | Lust status/approach |
+| Nimbo area/evidence | Android value for MaxSpeedVPN | MaxSpeedVPN status/approach |
 |---|---|---|
 | `ProfilesScreen`, `ProfileServersScreen`, `SubscriptionSettingsScreen` | subscriptions, profile/server organization | Implemented independently: merged home, groups, search, favorites, sort, atomic refresh |
 | `SubscriptionRequestIdentity`, subscription model | provider requests and subscription metadata | Implemented: safe deep links, clipboard confirmation, `subscription-userinfo` traffic/limit/expiry |
@@ -22,9 +22,9 @@ No `LICENSE` or `COPYING` file exists in the inspected Git tree. Copyright there
 | `TrafficMonitorScreen` | live session traffic | Planned; requires trustworthy HEV/core counters rather than fabricated estimates |
 | `UpdateScreen`, `UpdateManager` | in-app update/changelog | Planned; GitHub release notes and project changelog already enforced in CI |
 | `BootRestoreReceiver` | reconnect after reboot | Planned, opt-in only; must respect Android background restrictions |
-| `NotificationHistoryScreen` | operational history | Existing Lust persistent diagnostic log covers core/service/UI events |
+| `NotificationHistoryScreen` | operational history | Existing MaxSpeedVPN persistent diagnostic log covers core/service/UI events |
 | `NetworkPresetsScreen`, `NetworkProfileManager` | network-aware profiles | Planned after lifecycle/network callback tests |
-| `AppearanceSettingsScreen`, `AppIconSettingsScreen` | appearance customization | Low priority; current redesign follows Lust design system |
+| `AppearanceSettingsScreen`, `AppIconSettingsScreen` | appearance customization | Low priority; current redesign follows MaxSpeedVPN design system |
 | Hysteria2/XHTTP/HTTPUpgrade handling in core/config layers | protocol/transport parity | Planned through sing-box schema and real Android traffic acceptance |
 | QR workflows | fast import/share | Planned with a small, audited decoder; avoid a large ML dependency that defeats APK reduction |
 | Quick settings/service controls | fast connection toggle | Planned after foreground-service lifecycle acceptance |

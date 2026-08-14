@@ -139,7 +139,7 @@ class UpdateRepository(private val context: Context) {
     }
 
     private companion object {
-        const val RELEASES_URL = "https://api.github.com/repos/envywook/Lust/releases?per_page=20"
+        const val RELEASES_URL = "https://api.github.com/repos/envywook/MaxSpeedVPN/releases?per_page=20"
         const val MAX_METADATA = 1L * 1024 * 1024
         const val MAX_APK = 250L * 1024 * 1024
     }

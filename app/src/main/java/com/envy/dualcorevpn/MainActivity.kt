@@ -104,8 +104,8 @@ import androidx.compose.ui.unit.sp
 import androidx.core.app.ShareCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
-import com.envy.dualcorevpn.backup.LustBackupCodec
-import com.envy.dualcorevpn.backup.LustBackupRepository
+import com.envy.dualcorevpn.backup.MaxSpeedVpnBackupCodec
+import com.envy.dualcorevpn.backup.MaxSpeedVpnBackupRepository
 import com.envy.dualcorevpn.core.EngineKind
 import com.envy.dualcorevpn.core.VpnSessionState
 import com.envy.dualcorevpn.core.VpnSessionStore
@@ -141,7 +141,7 @@ import com.envy.dualcorevpn.ui.AdvancedFeaturesScreen
 import com.envy.dualcorevpn.ui.DashboardHeader
 import com.envy.dualcorevpn.ui.SpeedDashboard
 import com.envy.dualcorevpn.ui.dashboardStrings
-import com.envy.dualcorevpn.vpn.DualCoreVpnService
+import com.envy.dualcorevpn.vpn.MaxSpeedVpnService
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
@@ -195,7 +195,7 @@ private const val REQUEST_NOTIFICATION_PERMISSION = 1001
 class MainActivity : ComponentActivity() {
     private lateinit var repository: SubscriptionRepository
     private lateinit var settingsRepository: VpnSettingsRepository
-    private lateinit var backupRepository: LustBackupRepository
+    private lateinit var backupRepository: MaxSpeedVpnBackupRepository
     private lateinit var updateRepository: UpdateRepository
     private var vpnSettings by mutableStateOf(VpnSettings())
     private var permissionResult: ((Boolean) -> Unit)? = null
@@ -266,7 +266,7 @@ class MainActivity : ComponentActivity() {
                 withContext(Dispatchers.IO) {
                     val value = contentResolver.openInputStream(uri)?.bufferedReader()?.use(::readBackupBounded)
                         ?: error("Не удалось открыть файл")
-                    LustBackupCodec.decode(value)
+                    MaxSpeedVpnBackupCodec.decode(value)
                     value
                 }
             }.onSuccess { value ->
@@ -287,7 +287,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         repository = SubscriptionRepository(applicationContext)
         settingsRepository = VpnSettingsRepository(applicationContext)
-        backupRepository = LustBackupRepository(applicationContext)
+        backupRepository = MaxSpeedVpnBackupRepository(applicationContext)
         updateRepository = UpdateRepository(applicationContext)
         updateStatus = getString(R.string.update_version, BuildConfig.VERSION_NAME)
         vpnSettings = settingsRepository.load()
@@ -295,8 +295,8 @@ class MainActivity : ComponentActivity() {
         AppLog.info("UI", "Application opened")
         handleSubscriptionIntent(intent)
         setContent {
-            LustTheme {
-                LustApp(
+            MaxSpeedVpnTheme {
+                MaxSpeedVpnApp(
                     revision = reloadUi,
                     repository = repository,
                     loading = loading,
@@ -639,24 +639,24 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startVpn(server: ServerProfile) {
-        val intent = Intent(this, DualCoreVpnService::class.java)
-            .setAction(DualCoreVpnService.ACTION_CONNECT)
-            .putExtra(DualCoreVpnService.EXTRA_XRAY_CONFIG, server.config)
-            .putExtra(DualCoreVpnService.EXTRA_SERVER_NAME, server.name)
-            .putExtra(DualCoreVpnService.EXTRA_SERVER_ID, server.id)
-            .putExtra(DualCoreVpnService.EXTRA_SERVER_PROTOCOL, server.protocol)
-            .putExtra(DualCoreVpnService.EXTRA_SERVER_ADDRESS, server.address)
-            .putExtra(DualCoreVpnService.EXTRA_SERVER_PORT, server.port)
+        val intent = Intent(this, MaxSpeedVpnService::class.java)
+            .setAction(MaxSpeedVpnService.ACTION_CONNECT)
+            .putExtra(MaxSpeedVpnService.EXTRA_XRAY_CONFIG, server.config)
+            .putExtra(MaxSpeedVpnService.EXTRA_SERVER_NAME, server.name)
+            .putExtra(MaxSpeedVpnService.EXTRA_SERVER_ID, server.id)
+            .putExtra(MaxSpeedVpnService.EXTRA_SERVER_PROTOCOL, server.protocol)
+            .putExtra(MaxSpeedVpnService.EXTRA_SERVER_ADDRESS, server.address)
+            .putExtra(MaxSpeedVpnService.EXTRA_SERVER_PORT, server.port)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
     }
 
     private fun stopVpn() {
-        startService(Intent(this, DualCoreVpnService::class.java).setAction(DualCoreVpnService.ACTION_DISCONNECT))
+        startService(Intent(this, MaxSpeedVpnService::class.java).setAction(MaxSpeedVpnService.ACTION_DISCONNECT))
     }
 }
 
 @Composable
-private fun LustTheme(content: @Composable () -> Unit) {
+private fun MaxSpeedVpnTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = androidx.compose.material3.darkColorScheme(
             primary = Accent,
@@ -718,7 +718,7 @@ private fun AppTabIcon(tab: AppTab, selected: Boolean) {
 }
 
 @Composable
-private fun LustApp(
+private fun MaxSpeedVpnApp(
     revision: Int,
     repository: SubscriptionRepository,
     loading: Boolean,
@@ -1049,7 +1049,7 @@ private fun SubscriptionsScreen(
                         if (usage != null) {
                             val context = LocalContext.current
                             val used = usage.usedBytes?.let { android.text.format.Formatter.formatFileSize(context, it) } ?: "—"
-                            val total = usage.totalBytes?.let { android.text.format.Formatter.formatFileSize(context, it) } ?: "∞"
+                            val total = usage.quotaBytes?.let { android.text.format.Formatter.formatFileSize(context, it) } ?: "∞"
                             Text(stringResource(R.string.subscription_usage, used, total), color = Muted, fontSize = 12.sp)
                             usage.expiresAtEpochSeconds?.let { expires ->
                                 val formatted = java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(java.util.Date(expires * 1_000L))

@@ -7,7 +7,7 @@ XRAY_SHA256="0242df3843d59bb9aa68ddd52cb2ca443871a24b1f2bee4d5a346e74d5e4ee5d"
 V2RAYNG_TAG="2.2.6"
 SING_BOX_VERSION="1.13.14-extended-2.5.2-lust.1"
 SING_BOX_TAG="sing-box-lust-1.13.14-ext2.5.2.1"
-SING_BOX_REPO="envywook/Lust"
+SING_BOX_REPO="envywook/MaxSpeedVPN"
 ABIS=(armeabi-v7a arm64-v8a x86 x86_64)
 declare -A APK_NAME APK_URL APK_SHA256
 SING_ARCH=(arm arm64 386 amd64)

@@ -3,6 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// Names intentionally match the existing CI secrets and keep the established release certificate.
 val releaseKeystorePath = providers.environmentVariable("LUST_KEYSTORE_PATH")
 val releaseKeystorePassword = providers.environmentVariable("LUST_KEYSTORE_PASSWORD")
 val releaseKeyAlias = providers.environmentVariable("LUST_KEY_ALIAS")

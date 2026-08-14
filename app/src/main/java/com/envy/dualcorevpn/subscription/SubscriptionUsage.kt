@@ -11,6 +11,10 @@ data class SubscriptionUsage(
             uploadBytes == null && downloadBytes == null -> null
             else -> runCatching { Math.addExact(uploadBytes ?: 0L, downloadBytes ?: 0L) }.getOrNull()
         }
+
+    /** Providers conventionally report total=0 for an unlimited plan. */
+    val quotaBytes: Long?
+        get() = totalBytes?.takeIf { it > 0L }
 }
 
 object SubscriptionUsageParser {

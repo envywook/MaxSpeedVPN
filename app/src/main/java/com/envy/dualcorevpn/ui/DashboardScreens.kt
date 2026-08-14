@@ -536,7 +536,7 @@ private fun ServerSlider(
                     val currentDescription = subscriptions.firstOrNull { it.id == current.subscriptionId }?.name.orEmpty()
                     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text(
-                            localizedServerName(current.name),
+                            localizedServerName(serverDisplayName(current.name)),
                             color = TextMain,
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
@@ -804,7 +804,7 @@ private fun ServerListCard(
                 Surface(shape = CircleShape, color = PanelHigh, modifier = Modifier.size(38.dp)) { Box(contentAlignment = Alignment.Center) { Text(serverFlag(server), fontSize = 19.sp) } }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(localizedServerName(cleanServerName(server.name)), color = TextMain, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = if (server.id == selected?.id) FontWeight.Bold else FontWeight.Medium)
+                    Text(localizedServerName(serverDisplayName(cleanServerName(server.name))), color = TextMain, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = if (server.id == selected?.id) FontWeight.Bold else FontWeight.Medium)
                     Text("${server.protocol.uppercase()} · ${server.address}", color = TextMuted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 if (server.id in latencyTestingIds) CircularProgressIndicator(Modifier.size(18.dp), color = Mint, strokeWidth = 2.dp)
@@ -833,7 +833,7 @@ private fun ServerListCard(
     configServer?.let { server ->
         AlertDialog(
             onDismissRequest = { configServer = null },
-            title = { Text(localizedServerName(cleanServerName(server.name))) },
+            title = { Text(localizedServerName(serverDisplayName(cleanServerName(server.name)))) },
             text = { Text(server.config, maxLines = 18, overflow = TextOverflow.Ellipsis) },
             confirmButton = {
                 TextButton(onClick = {
@@ -876,7 +876,22 @@ private fun localizedServerName(name: String): String = when (name.trim().lowerc
 
 private fun serverFlag(server: ServerProfile): String = serverFlagFromName(server.name)
 
+private val countryFlagRegex = Regex("[\\x{1F1E6}-\\x{1F1FF}]{2}")
+
+/**
+ * The initial flag is the endpoint badge. The remaining flags/arrow chain stays in the name as
+ * route context, e.g. 🇺🇸🇷🇺➙🇦🇹➙США becomes badge 🇺🇸 plus route 🇷🇺 ➙ 🇦🇹 ➙ США.
+ */
+internal fun serverDisplayName(name: String): String {
+    val withoutEndpoint = countryFlagRegex.replaceFirst(name.trim(), "")
+    return withoutEndpoint
+        .replace("➙", " ➙ ")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+}
+
 internal fun serverFlagFromName(name: String): String {
+    countryFlagRegex.find(name)?.value?.let { return it }
     val value = name.lowercase()
     fun matches(vararg aliases: String): Boolean = aliases.any { alias ->
         if (alias.any(Char::isLetter)) {

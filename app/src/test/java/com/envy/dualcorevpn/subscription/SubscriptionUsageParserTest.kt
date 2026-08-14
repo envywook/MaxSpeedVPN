@@ -24,6 +24,19 @@ class SubscriptionUsageParserTest {
     }
 
     @Test
+    fun `zero total means unlimited quota`() {
+        val usage = SubscriptionUsage(uploadBytes = 2_000_000_000L, downloadBytes = 4_710_000_000L, totalBytes = 0L)
+
+        assertEquals(6_710_000_000L, usage.usedBytes)
+        assertNull(usage.quotaBytes)
+    }
+
+    @Test
+    fun `keeps a positive total as quota`() {
+        assertEquals(1_000L, SubscriptionUsage(totalBytes = 1_000L).quotaBytes)
+    }
+
+    @Test
     fun `used bytes does not overflow`() {
         assertNull(SubscriptionUsage(uploadBytes = Long.MAX_VALUE, downloadBytes = 1).usedBytes)
     }

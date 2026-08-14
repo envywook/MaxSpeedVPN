@@ -46,7 +46,7 @@ import androidx.compose.ui.unit.sp
 import com.envy.dualcorevpn.R
 import com.envy.dualcorevpn.settings.SplitTunnelMode
 import com.envy.dualcorevpn.settings.VpnSettings
-import com.envy.dualcorevpn.vpn.LustTileService
+import com.envy.dualcorevpn.vpn.MaxSpeedVpnTileService
 
 internal data class LaunchableApp(val label: String, val packageName: String)
 
@@ -156,7 +156,7 @@ internal fun AdvancedFeaturesScreen(
                     OutlinedButton(onClick = {
                         if (Build.VERSION.SDK_INT >= 33) {
                             context.getSystemService(StatusBarManager::class.java).requestAddTileService(
-                                ComponentName(context, LustTileService::class.java),
+                                ComponentName(context, MaxSpeedVpnTileService::class.java),
                                 context.getString(R.string.quick_tile_label),
                                 Icon.createWithResource(context, R.drawable.ic_stat_vpn),
                                 context.mainExecutor,

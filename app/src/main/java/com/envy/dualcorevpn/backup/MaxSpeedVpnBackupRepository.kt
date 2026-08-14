@@ -5,14 +5,14 @@ import com.envy.dualcorevpn.core.EngineKind
 import com.envy.dualcorevpn.routing.RoutingMode
 import com.envy.dualcorevpn.settings.VpnSettings
 
-class LustBackupRepository(context: Context) {
+class MaxSpeedVpnBackupRepository(context: Context) {
     private val subscriptions = context.getSharedPreferences("subscriptions", Context.MODE_PRIVATE)
     private val settings = context.getSharedPreferences("vpn_settings", Context.MODE_PRIVATE)
 
-    fun export(): String = LustBackupCodec.encode(snapshot())
+    fun export(): String = MaxSpeedVpnBackupCodec.encode(snapshot())
 
     fun restore(value: String) {
-        val decoded = LustBackupCodec.decode(value)
+        val decoded = MaxSpeedVpnBackupCodec.decode(value)
         val restoredSettings = validateSettings(decoded.vpnSettings)
         val before = snapshot()
         val beforeSettings = validateSettings(before.vpnSettings)
@@ -29,7 +29,7 @@ class LustBackupRepository(context: Context) {
         }
     }
 
-    private fun snapshot(): LustBackup = LustBackup(
+    private fun snapshot(): MaxSpeedVpnBackup = MaxSpeedVpnBackup(
         subscriptionsJson = subscriptions.getString(KEY_SUBSCRIPTIONS, "[]") ?: "[]",
         serversJson = subscriptions.getString(KEY_SERVERS, "[]") ?: "[]",
         selectedServerId = subscriptions.getString(KEY_SELECTED, null),
@@ -44,7 +44,7 @@ class LustBackupRepository(context: Context) {
         ),
     )
 
-    private fun writeSubscriptions(backup: LustBackup): Boolean = subscriptions.edit().clear()
+    private fun writeSubscriptions(backup: MaxSpeedVpnBackup): Boolean = subscriptions.edit().clear()
         .putString(KEY_SUBSCRIPTIONS, backup.subscriptionsJson)
         .putString(KEY_SERVERS, backup.serversJson)
         .putString(KEY_SELECTED, backup.selectedServerId)

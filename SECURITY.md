@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Lust is currently an early alpha. Only the latest commit on the default branch is considered for security fixes.
+MaxSpeedVPN is currently an early alpha. Only the latest commit on the default branch is considered for security fixes.
 
 ## Reporting a vulnerability
 

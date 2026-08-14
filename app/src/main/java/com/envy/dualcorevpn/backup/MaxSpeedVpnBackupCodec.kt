@@ -4,7 +4,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URI
 
-data class LustBackup(
+data class MaxSpeedVpnBackup(
     val subscriptionsJson: String,
     val serversJson: String,
     val selectedServerId: String?,
@@ -12,11 +12,11 @@ data class LustBackup(
     val vpnSettings: Map<String, String>,
 )
 
-object LustBackupCodec {
+object MaxSpeedVpnBackupCodec {
     private const val SCHEMA_VERSION = 1
     private const val MAX_ENTRIES = 50_000
 
-    fun encode(backup: LustBackup): String = JSONObject().apply {
+    fun encode(backup: MaxSpeedVpnBackup): String = JSONObject().apply {
         put("schemaVersion", SCHEMA_VERSION)
         put("subscriptions", backup.subscriptionsJson)
         put("servers", backup.serversJson)
@@ -25,7 +25,7 @@ object LustBackupCodec {
         put("vpnSettings", JSONObject(backup.vpnSettings))
     }.toString(2)
 
-    fun decode(value: String): LustBackup {
+    fun decode(value: String): MaxSpeedVpnBackup {
         val root = JSONObject(value)
         require(root.optInt("schemaVersion", -1) == SCHEMA_VERSION) { "Неподдерживаемая версия резервной копии" }
         val subscriptionsJson = root.getString("subscriptions")
@@ -37,7 +37,7 @@ object LustBackupCodec {
         val favorites = root.optString("favoriteServerIds")
         require(parseFavorites(favorites).all(serverIds::contains)) { "Избранный сервер отсутствует в резервной копии" }
         val settings = root.optJSONObject("vpnSettings") ?: JSONObject()
-        return LustBackup(
+        return MaxSpeedVpnBackup(
             subscriptionsJson = subscriptionsJson,
             serversJson = serversJson,
             selectedServerId = selected,

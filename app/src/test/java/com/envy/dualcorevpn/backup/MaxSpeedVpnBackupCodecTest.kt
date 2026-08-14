@@ -5,10 +5,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 import kotlin.test.assertFailsWith
 
-class LustBackupCodecTest {
+class MaxSpeedVpnBackupCodecTest {
     private val subscriptions = """[{"id":"sub","name":"Main","url":"https://example.test/sub","updatedAt":1}]"""
     private val servers = """[{"id":"server","subscriptionId":"sub","name":"Server","protocol":"vless","address":"edge.example","port":443,"config":"{}"}]"""
-    private val backup = LustBackup(
+    private val backup = MaxSpeedVpnBackup(
         subscriptionsJson = subscriptions,
         serversJson = servers,
         selectedServerId = "server",
@@ -18,20 +18,20 @@ class LustBackupCodecTest {
 
     @Test
     fun `round trips complete versioned backup`() {
-        assertEquals(backup, LustBackupCodec.decode(LustBackupCodec.encode(backup)))
+        assertEquals(backup, MaxSpeedVpnBackupCodec.decode(MaxSpeedVpnBackupCodec.encode(backup)))
     }
 
     @Test
     fun `rejects unknown schema before reading state`() {
         assertFailsWith<IllegalArgumentException> {
-            LustBackupCodec.decode("""{"schemaVersion":2,"subscriptions":"[]","servers":"[]"}""")
+            MaxSpeedVpnBackupCodec.decode("""{"schemaVersion":2,"subscriptions":"[]","servers":"[]"}""")
         }
     }
 
     @Test
     fun `rejects malformed embedded snapshots`() {
         assertFailsWith<Exception> {
-            LustBackupCodec.decode("""{"schemaVersion":1,"subscriptions":"not-json","servers":"[]"}""")
+            MaxSpeedVpnBackupCodec.decode("""{"schemaVersion":1,"subscriptions":"not-json","servers":"[]"}""")
         }
         assertFailsWith<Exception> { decodeWith("[1]", "[]") }
         assertFailsWith<Exception> { decodeWith("[{\"id\":\"sub\"}]", "[]") }
@@ -43,7 +43,7 @@ class LustBackupCodecTest {
     @Test
     fun `accepts persisted subscription usage keys`() {
         val withUsage = "[{\"id\":\"sub\",\"name\":\"Main\",\"url\":\"https://example.test/sub\",\"updatedAt\":1,\"usage\":{\"upload\":1,\"download\":2,\"total\":3,\"expire\":4}}]"
-        assertEquals(withUsage, LustBackupCodec.decode(LustBackupCodec.encode(backup.copy(subscriptionsJson = withUsage))).subscriptionsJson)
+        assertEquals(withUsage, MaxSpeedVpnBackupCodec.decode(MaxSpeedVpnBackupCodec.encode(backup.copy(subscriptionsJson = withUsage))).subscriptionsJson)
     }
 
     @Test
@@ -63,7 +63,7 @@ class LustBackupCodecTest {
         servers: String,
         selected: String? = null,
         favorite: String = "",
-    ) = LustBackupCodec.decode(JSONObject().apply {
+    ) = MaxSpeedVpnBackupCodec.decode(JSONObject().apply {
         put("schemaVersion", 1)
         put("subscriptions", subscriptions)
         put("servers", servers)

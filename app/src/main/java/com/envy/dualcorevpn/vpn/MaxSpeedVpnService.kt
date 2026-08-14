@@ -44,7 +44,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.io.File
 
-class DualCoreVpnService : VpnService() {
+class MaxSpeedVpnService : VpnService() {
     private val stateMachine = VpnSessionStateMachine(onStateChanged = VpnSessionStore::update)
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var operation: Job? = null
@@ -287,7 +287,7 @@ class DualCoreVpnService : VpnService() {
             PendingIntent.getService(
                 this,
                 1,
-                Intent(this, DualCoreVpnService::class.java).setAction(ACTION_DISCONNECT),
+                Intent(this, MaxSpeedVpnService::class.java).setAction(ACTION_DISCONNECT),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
         )

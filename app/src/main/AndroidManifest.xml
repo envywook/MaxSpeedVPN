@@ -24,7 +24,7 @@
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:theme="@style/Theme.DualCoreVPN">
+        android:theme="@style/Theme.MaxSpeedVPN">
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -78,7 +78,7 @@
                 android:resource="@xml/file_paths" />
         </provider>
         <service
-            android:name=".vpn.DualCoreVpnService"
+            android:name=".vpn.MaxSpeedVpnService"
             android:exported="false"
             android:foregroundServiceType="specialUse"
             android:permission="android.permission.BIND_VPN_SERVICE">
@@ -90,7 +90,7 @@
             </intent-filter>
         </service>
         <service
-            android:name=".vpn.LustTileService"
+            android:name=".vpn.MaxSpeedVpnTileService"
             android:exported="true"
             android:icon="@drawable/ic_stat_vpn"
             android:label="@string/quick_tile_label"

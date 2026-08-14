@@ -53,6 +53,7 @@ jobs:
       - name: Restore release signing key
         if: startsWith(github.ref, 'refs/tags/v')
         env:
+          # Legacy secret names are retained so the existing release certificate remains usable.
           KEYSTORE_BASE64: ${{ secrets.LUST_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.LUST_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.LUST_KEY_ALIAS }}
@@ -93,7 +94,7 @@ jobs:
       - name: Upload CI artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: Lust-${{ github.sha }}
+          name: MaxSpeedVPN-${{ github.sha }}
           path: dist/
           if-no-files-found: error
           retention-days: 14
@@ -172,7 +173,7 @@ jobs:
       - name: Download verified APK artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: Lust-${{ github.sha }}
+          name: MaxSpeedVPN-${{ github.sha }}
           path: dist
 
       - name: Publish GitHub pre-release

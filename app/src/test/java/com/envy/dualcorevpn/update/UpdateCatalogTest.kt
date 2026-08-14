@@ -17,11 +17,11 @@ class UpdateCatalogTest {
     @Test
     fun `selects newest non draft prerelease and exact abi asset`() {
         val json = JSONArray("""[
-          {"tag_name":"v0.1.11-alpha","draft":true,"prerelease":true,"html_url":"https://github.com/envywook/Lust/releases/tag/v0.1.11-alpha","body":"draft","assets":[]},
-          {"tag_name":"v0.1.10-alpha","draft":false,"prerelease":true,"html_url":"https://github.com/envywook/Lust/releases/tag/v0.1.10-alpha","body":"notes","assets":[
-            {"name":"MaxSpeedVPN-v0.1.10-alpha-arm64-v8a.apk","browser_download_url":"https://github.com/envywook/Lust/releases/download/v0.1.10-alpha/a.apk","size":12},
-            {"name":"MaxSpeedVPN-v0.1.10-alpha-universal.apk","browser_download_url":"https://github.com/envywook/Lust/releases/download/v0.1.10-alpha/u.apk","size":20},
-            {"name":"SHA256SUMS.txt","browser_download_url":"https://github.com/envywook/Lust/releases/download/v0.1.10-alpha/SHA256SUMS.txt","size":100}
+          {"tag_name":"v0.1.11-alpha","draft":true,"prerelease":true,"html_url":"https://github.com/envywook/MaxSpeedVPN/releases/tag/v0.1.11-alpha","body":"draft","assets":[]},
+          {"tag_name":"v0.1.10-alpha","draft":false,"prerelease":true,"html_url":"https://github.com/envywook/MaxSpeedVPN/releases/tag/v0.1.10-alpha","body":"notes","assets":[
+            {"name":"MaxSpeedVPN-v0.1.10-alpha-arm64-v8a.apk","browser_download_url":"https://github.com/envywook/MaxSpeedVPN/releases/download/v0.1.10-alpha/a.apk","size":12},
+            {"name":"MaxSpeedVPN-v0.1.10-alpha-universal.apk","browser_download_url":"https://github.com/envywook/MaxSpeedVPN/releases/download/v0.1.10-alpha/u.apk","size":20},
+            {"name":"SHA256SUMS.txt","browser_download_url":"https://github.com/envywook/MaxSpeedVPN/releases/download/v0.1.10-alpha/SHA256SUMS.txt","size":100}
           ]}
         ]""")
 
@@ -46,7 +46,7 @@ class UpdateCatalogTest {
     fun `ignores non prerelease entries even with alpha tag`() {
         val json = JSONArray("""[{
           "tag_name":"v9.9.9-alpha","draft":false,"prerelease":false,
-          "html_url":"https://github.com/envywook/Lust/releases/tag/v9.9.9-alpha","assets":[]
+          "html_url":"https://github.com/envywook/MaxSpeedVPN/releases/tag/v9.9.9-alpha","assets":[]
         }]""")
 
         assertNull(UpdateCatalog.select(json, ReleaseVersion(0, 1, 10), listOf("arm64-v8a")))
@@ -55,8 +55,8 @@ class UpdateCatalogTest {
     @Test
     fun `parses exact checksum and rejects duplicates or traversal`() {
         val digest = "a".repeat(64)
-        assertEquals(digest, UpdateChecksums.expected("$digest  Lust-v.apk\n", "Lust-v.apk"))
-        assertNull(UpdateChecksums.expected("$digest  ../Lust-v.apk\n", "Lust-v.apk"))
-        assertNull(UpdateChecksums.expected("$digest  Lust-v.apk\n$digest *Lust-v.apk\n", "Lust-v.apk"))
+        assertEquals(digest, UpdateChecksums.expected("$digest  MaxSpeedVPN-v.apk\n", "MaxSpeedVPN-v.apk"))
+        assertNull(UpdateChecksums.expected("$digest  ../MaxSpeedVPN-v.apk\n", "MaxSpeedVPN-v.apk"))
+        assertNull(UpdateChecksums.expected("$digest  MaxSpeedVPN-v.apk\n$digest *MaxSpeedVPN-v.apk\n", "MaxSpeedVPN-v.apk"))
     }
 }

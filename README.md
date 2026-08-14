@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="docs/assets/maxspeedvpn-banner.svg" alt="MaxSpeedVPN — Android VPN client" width="100%">
+  <img src="docs/assets/maxspeedvpn-logo.jpg" alt="MaxSpeedVPN — Android VPN client" width="100%">
 </p>
 
 <p align="center">
-  <a href="https://github.com/envywook/Lust/releases"><img src="https://img.shields.io/github/v/release/envywook/Lust?include_prereleases&style=for-the-badge&color=9b6dff" alt="Release"></a>
-  <a href="https://github.com/envywook/Lust/actions/workflows/android.yml"><img src="https://img.shields.io/github/actions/workflow/status/envywook/Lust/android.yml?branch=main&style=for-the-badge&label=Android%20CI" alt="Android CI"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/envywook/Lust?style=for-the-badge&color=6f42c1" alt="GPL-3.0"></a>
+  <a href="https://github.com/envywook/MaxSpeedVPN/releases"><img src="https://img.shields.io/github/v/release/envywook/MaxSpeedVPN?include_prereleases&style=for-the-badge&color=9b6dff" alt="Release"></a>
+  <a href="https://github.com/envywook/MaxSpeedVPN/actions/workflows/android.yml"><img src="https://img.shields.io/github/actions/workflow/status/envywook/MaxSpeedVPN/android.yml?branch=main&style=for-the-badge&label=Android%20CI" alt="Android CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/envywook/MaxSpeedVPN?style=for-the-badge&color=6f42c1" alt="GPL-3.0"></a>
   <img src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android 8.0+">
   <img src="https://img.shields.io/badge/Kotlin-1.9-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin">
 </p>
@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/envywook/Lust/releases"><strong>Скачать APK</strong></a>
+  <a href="https://github.com/envywook/MaxSpeedVPN/releases"><strong>Скачать APK</strong></a>
   ·
   <a href="#сборка"><strong>Собрать из исходников</strong></a>
   ·
@@ -83,13 +83,13 @@
 ## Архитектура
 
 ```text
-┌───────────────────────────── LUST ──────────────────────────────┐
+┌───────────────────────────── MAXSPEEDVPN ──────────────────────────────┐
 │                                                                 │
 │  Jetpack Compose UI                                             │
 │     │                                                           │
 │     ├── SubscriptionRepository → Parser → Xray JSON             │
 │     │                                                           │
-│     └── DualCoreVpnService                                      │
+│     └── MaxSpeedVpnService                                      │
 │             │                                                   │
 │             ▼                                                   │
 │       VpnSessionCoordinator ───────────────→ Persistent AppLog  │
@@ -113,7 +113,7 @@
 SubscriptionParser → Xray JSON с локальным SOCKS inbound
       │
       ▼
-DualCoreVpnService → VpnSessionCoordinator
+MaxSpeedVpnService → VpnSessionCoordinator
       │
       ├── Android VpnService создаёт TUN
       ├── HEV tun2socks получает TUN FD
@@ -124,7 +124,7 @@ Android traffic → TUN → HEV → SOCKS 127.0.0.1:10808 → Xray → сеть
 
 ## Скачать
 
-Готовые сборки и описание изменений публикуются на странице [GitHub Releases](https://github.com/envywook/Lust/releases). Полная история — в [CHANGELOG.md](CHANGELOG.md).
+Готовые сборки и описание изменений публикуются на странице [GitHub Releases](https://github.com/envywook/MaxSpeedVPN/releases). Полная история — в [CHANGELOG.md](CHANGELOG.md).
 
 Выбирайте файл по архитектуре устройства:
 
@@ -154,7 +154,7 @@ ABI-specific APK примерно на 65–68% меньше universal. Для �
 ### Команды
 
 ```bash
-git clone https://github.com/envywook/Lust.git MaxSpeedVPN
+git clone https://github.com/envywook/MaxSpeedVPN.git MaxSpeedVPN
 cd MaxSpeedVPN
 
 ./scripts/prepare-native-deps.sh
@@ -187,7 +187,7 @@ Workflow [Android CI and Release](.github/workflows/android.yml):
 | Тег `v*` | тесты, сборка и GitHub pre-release с APK и SHA-256 |
 | Ручной запуск | тесты и CI artifact |
 
-[![Android CI](https://github.com/envywook/Lust/actions/workflows/android.yml/badge.svg?branch=main)](https://github.com/envywook/Lust/actions/workflows/android.yml)
+[![Android CI](https://github.com/envywook/MaxSpeedVPN/actions/workflows/android.yml/badge.svg?branch=main)](https://github.com/envywook/MaxSpeedVPN/actions/workflows/android.yml)
 
 ## Статус проекта
 
