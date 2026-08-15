@@ -109,6 +109,8 @@ import com.envy.dualcorevpn.backup.MaxSpeedVpnBackupRepository
 import com.envy.dualcorevpn.core.EngineKind
 import com.envy.dualcorevpn.core.VpnSessionState
 import com.envy.dualcorevpn.core.VpnSessionStore
+import com.envy.dualcorevpn.core.hasActiveVpnSession
+import com.envy.dualcorevpn.core.shouldRestartForSelection
 import com.envy.dualcorevpn.logging.AppLog
 import com.envy.dualcorevpn.logging.LogEntry
 import com.envy.dualcorevpn.logging.LogLevel
@@ -139,7 +141,6 @@ import com.envy.dualcorevpn.update.UpdateRepository
 import com.envy.dualcorevpn.ui.HomeDashboard
 import com.envy.dualcorevpn.ui.AdvancedFeaturesScreen
 import com.envy.dualcorevpn.ui.DashboardHeader
-import com.envy.dualcorevpn.ui.SpeedDashboard
 import com.envy.dualcorevpn.ui.dashboardStrings
 import com.envy.dualcorevpn.vpn.MaxSpeedVpnService
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
@@ -304,11 +305,7 @@ class MainActivity : ComponentActivity() {
                     onDismissMessage = { message = null },
                     onConnect = ::requestConnect,
                     onDisconnect = ::stopVpn,
-                    onSelect = {
-                        repository.select(it.id)
-                        SmartConnectState(this).pin(it.id)
-                        reloadUi++
-                    },
+                    onSelect = ::selectServer,
                     pendingSubscriptionImport = pendingSubscriptionImport,
                     onDismissSubscriptionImport = { pendingSubscriptionImport = null },
                     onAddSubscription = ::addSubscription,
@@ -321,12 +318,7 @@ class MainActivity : ComponentActivity() {
                     updateStatus = updateStatus,
                     onCheckUpdate = ::checkForUpdate,
                     vpnSettings = vpnSettings,
-                    onSaveVpnSettings = { settings ->
-                        settingsRepository.save(settings)
-                        SubscriptionRefreshWorker.schedule(this, settings.subscriptionRefreshHours)
-                        vpnSettings = settings
-                        message = "VPN-настройки сохранены; применятся при следующем подключении"
-                    },
+                    onSaveVpnSettings = ::saveVpnSettings,
                     latencyResults = latencyResults,
                     latencyTesting = latencyTesting,
                     latencyTestingIds = latencyTestingIds,
@@ -593,6 +585,29 @@ class MainActivity : ComponentActivity() {
         startActivity(Intent.createChooser(intent, "Экспорт журнала"))
     }
 
+    private fun saveVpnSettings(settings: VpnSettings) {
+        val shouldRestart = hasActiveVpnSession(VpnSessionStore.state.value)
+        settingsRepository.save(settings)
+        SubscriptionRefreshWorker.schedule(this, settings.subscriptionRefreshHours)
+        vpnSettings = settings
+        if (shouldRestart) {
+            val selected = repository.servers().firstOrNull { it.id == repository.selectedServerId() }
+            if (selected != null) requestVpnPermission(selected)
+        } else {
+            message = "VPN-настройки сохранены; применятся при следующем подключении"
+        }
+    }
+
+    private fun selectServer(server: ServerProfile) {
+        val previousServerId = repository.selectedServerId()
+        repository.select(server.id)
+        SmartConnectState(this).pin(server.id)
+        reloadUi++
+        if (shouldRestartForSelection(VpnSessionStore.state.value, previousServerId, server.id)) {
+            requestVpnPermission(server)
+        }
+    }
+
     private fun requestConnect(config: String) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             !notificationPermissionResolved &&
@@ -679,10 +694,10 @@ private fun MaxSpeedVpnTheme(content: @Composable () -> Unit) {
     )
 }
 
-private enum class AppTab { SPEED, HOME, SETTINGS, SUBSCRIPTIONS }
+private enum class AppTab { SUBSCRIPTIONS, HOME, SETTINGS }
 
 private fun AppTab.navigationOrder(): Int = when (this) {
-    AppTab.SPEED, AppTab.SUBSCRIPTIONS -> 0
+    AppTab.SUBSCRIPTIONS -> 0
     AppTab.HOME -> 1
     AppTab.SETTINGS -> 2
 }
@@ -690,22 +705,19 @@ private fun AppTab.navigationOrder(): Int = when (this) {
 @Composable
 private fun AppTabIcon(tab: AppTab, selected: Boolean) {
     val (regular, filled) = when (tab) {
-        AppTab.SPEED -> R.drawable.ic_speed_regular to R.drawable.ic_speed_filled
+        AppTab.SUBSCRIPTIONS -> R.drawable.ic_speed_regular to R.drawable.ic_speed_filled
         AppTab.HOME -> R.drawable.ic_home_regular to R.drawable.ic_home_filled
         AppTab.SETTINGS -> R.drawable.ic_settings_regular to R.drawable.ic_settings_filled
-        AppTab.SUBSCRIPTIONS -> return
     }
     val size = when (tab) {
         AppTab.HOME -> 29.dp
-        AppTab.SPEED -> 28.dp
-        AppTab.SETTINGS -> 27.dp
         AppTab.SUBSCRIPTIONS -> 28.dp
+        AppTab.SETTINGS -> 27.dp
     }
     val yOffset = when (tab) {
         AppTab.HOME -> 0.dp
-        AppTab.SPEED -> 1.dp
+        AppTab.SUBSCRIPTIONS -> 1.dp
         AppTab.SETTINGS -> 0.5.dp
-        AppTab.SUBSCRIPTIONS -> 0.dp
     }
     Crossfade(targetState = selected, animationSpec = tween(140), label = "tabIcon") { active ->
         Icon(
@@ -750,7 +762,6 @@ private fun MaxSpeedVpnApp(
     val vpnState by VpnSessionStore.state.collectAsState()
     val haptic = LocalHapticFeedback.current
     var tab by remember { mutableStateOf(AppTab.HOME) }
-    var subscriptionsParent by remember { mutableStateOf(AppTab.SPEED) }
     val subscriptions = repository.subscriptions()
     val servers = repository.servers()
     val selected = servers.firstOrNull { it.id == repository.selectedServerId() } ?: servers.firstOrNull()
@@ -772,36 +783,20 @@ private fun MaxSpeedVpnApp(
                         state = vpnState,
                         selected = selected,
                         servers = servers,
-                        subscriptions = subscriptions,
                         onConnect = onConnect,
                         onDisconnect = onDisconnect,
                         onSelect = onSelect,
-                        onManageSubscriptions = {
-                            subscriptionsParent = AppTab.HOME
-                            tab = AppTab.SUBSCRIPTIONS
-                        },
+                        latencyResults = latencyResults,
+                        latencyTesting = latencyTesting,
+                        latencyTestingIds = latencyTestingIds,
+                        onTestLatency = onTestLatency,
+                        onTestServerLatency = onTestServerLatency,
+                        onManageSubscriptions = { tab = AppTab.SUBSCRIPTIONS },
                     )
                 }
-                AppTab.SPEED -> SpeedDashboard(
-                    state = vpnState,
-                    selected = selected,
-                    servers = servers,
-                    subscriptions = subscriptions,
-                    latencyResults = latencyResults,
-                    latencyTesting = latencyTesting,
-                    latencyTestingIds = latencyTestingIds,
-                    onTestLatency = onTestLatency,
-                    onTestServerLatency = onTestServerLatency,
-                    onSelect = onSelect,
-                    onManageSubscriptions = {
-                        subscriptionsParent = AppTab.SPEED
-                        tab = AppTab.SUBSCRIPTIONS
-                    },
-                )
                 AppTab.SUBSCRIPTIONS -> SubscriptionsScreen(
                     subscriptions = subscriptions,
                     loading = loading,
-                    onBack = { tab = subscriptionsParent },
                     onAdd = onAddSubscription,
                     onImportProfileFile = onImportProfileFile,
                     onScanQr = onScanQr,
@@ -860,8 +855,8 @@ private fun MaxSpeedVpnApp(
                         ),
                     )
                     BoxWithConstraints(Modifier.fillMaxSize().padding(6.dp)) {
-                    val destinations = listOf(AppTab.SPEED, AppTab.HOME, AppTab.SETTINGS)
-                    val activeDestination = if (tab == AppTab.SUBSCRIPTIONS) subscriptionsParent else tab
+                    val destinations = listOf(AppTab.SUBSCRIPTIONS, AppTab.HOME, AppTab.SETTINGS)
+                    val activeDestination = tab
                     val activeIndex = destinations.indexOf(activeDestination).coerceAtLeast(0)
                     val itemWidth = (maxWidth - 8.dp) / 3
                     val indicatorX by animateDpAsState(
@@ -877,10 +872,9 @@ private fun MaxSpeedVpnApp(
                     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         destinations.forEach { item ->
                             val label = when (item) {
-                                AppTab.SPEED -> strings.speed
+                                AppTab.SUBSCRIPTIONS -> strings.subscriptions
                                 AppTab.HOME -> strings.home
                                 AppTab.SETTINGS -> strings.settings
-                                AppTab.SUBSCRIPTIONS -> ""
                             }
                             val active = activeDestination == item
                             Surface(
@@ -987,7 +981,6 @@ private fun ServersScreen(
 @Composable
 private fun SubscriptionsScreen(
     subscriptions: List<Subscription>, loading: Boolean,
-    onBack: () -> Unit,
     onAdd: (String, String) -> Unit,
     onImportProfileFile: () -> Unit,
     onScanQr: () -> Unit,
@@ -995,41 +988,10 @@ private fun SubscriptionsScreen(
     onRemove: (Subscription) -> Unit,
 ) {
     var showAdd by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().padding(20.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onBack) {
-                Text("‹", color = Accent, fontSize = 30.sp)
-                Spacer(Modifier.width(6.dp))
-                Text(stringResource(R.string.subscriptions_back), color = Accent)
-            }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            ScreenTitle(
-                stringResource(R.string.subscriptions_title),
-                stringResource(R.string.subscriptions_count, subscriptions.size),
-                Modifier.weight(1f),
-            )
-            val addSubscriptionLabel = stringResource(R.string.subscriptions_add)
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(48.dp)
-                    .semantics { contentDescription = addSubscriptionLabel }
-                    .clickable(enabled = !loading) { showAdd = true },
-            ) {
-                Surface(
-                    color = Accent,
-                    shape = CircleShape,
-                    modifier = Modifier.size(36.dp),
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text("+", color = Color.Black, fontSize = 24.sp, lineHeight = 24.sp)
-                    }
-                }
-            }
-        }
-        Spacer(Modifier.height(18.dp))
-        if (subscriptions.isEmpty()) EmptyState(
+    Column(Modifier.fillMaxSize()) {
+        DashboardHeader(onAdd = { showAdd = true }, addEnabled = !loading)
+        Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
+            if (subscriptions.isEmpty()) EmptyState(
             stringResource(R.string.subscriptions_empty_title),
             stringResource(R.string.subscriptions_empty_text),
             stringResource(R.string.subscriptions_add),
@@ -1066,6 +1028,7 @@ private fun SubscriptionsScreen(
                     }
                 }
             }
+        }
         }
     }
     if (showAdd) AddSubscriptionDialog(

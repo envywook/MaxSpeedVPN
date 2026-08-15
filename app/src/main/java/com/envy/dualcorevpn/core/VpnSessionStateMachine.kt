@@ -12,6 +12,12 @@ sealed interface VpnEvent {
     data class Failed(val message: String) : VpnEvent
 }
 
+internal fun hasActiveVpnSession(state: VpnSessionState): Boolean =
+    state is VpnSessionState.Connecting || state is VpnSessionState.Connected
+
+internal fun shouldRestartForSelection(state: VpnSessionState, previousServerId: String?, nextServerId: String): Boolean =
+    previousServerId != nextServerId && hasActiveVpnSession(state)
+
 class VpnSessionStateMachine(
     initial: VpnSessionState = VpnSessionState.Disconnected,
     private val onStateChanged: (VpnSessionState) -> Unit = {},

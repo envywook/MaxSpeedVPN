@@ -12,6 +12,7 @@ import androidx.core.app.NotificationCompat
 import com.envy.dualcorevpn.MainActivity
 import com.envy.dualcorevpn.R
 import com.envy.dualcorevpn.core.EngineKind
+import com.envy.dualcorevpn.core.EngineSelector
 import com.envy.dualcorevpn.core.NativeSingBoxGateway
 import com.envy.dualcorevpn.core.NativeXrayGateway
 import com.envy.dualcorevpn.core.SingBoxEngine
@@ -79,17 +80,22 @@ class MaxSpeedVpnService : VpnService() {
     }
 
     private fun connect(config: String?, server: VpnSessionServer?) {
-        if (coordinator != null) return
-        val engineKind = VpnSettingsRepository(this).load().engine
-        stateMachine.dispatch(VpnEvent.ConnectRequested(engineKind, server))
-        startForeground(NOTIFICATION_ID, buildNotification(getString(R.string.status_connecting)))
+        require(!config.isNullOrBlank()) { "Proxy configuration is required" }
+        val engineKind = EngineSelector.select(config, VpnSettingsRepository(this).load().engine)
+        val hadActiveSession = coordinator != null || operation?.isActive == true
         operation?.cancel()
         operation = serviceScope.launch {
             try {
+                if (hadActiveSession) {
+                    stateMachine.dispatch(VpnEvent.DisconnectRequested)
+                    stopSession()
+                    stateMachine.dispatch(VpnEvent.Disconnected)
+                }
+                stateMachine.dispatch(VpnEvent.ConnectRequested(engineKind, server))
+                startForeground(NOTIFICATION_ID, buildNotification(getString(R.string.status_connecting)))
                 if (engineKind == EngineKind.XRAY) {
                     initializationFailure?.let { throw IllegalStateException("Xray runtime initialization failed", it) }
                 }
-                require(!config.isNullOrBlank()) { "Proxy configuration is required" }
                 AppLog.info("VPN", "Starting $engineKind + HEV session")
                 val session = createCoordinator(engineKind)
                 coordinator = session

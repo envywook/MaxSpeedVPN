@@ -9,6 +9,7 @@
     <string name="disconnect">Отключить</string>
     <string name="notification_stop">Остановить</string>
 
+    <string name="nav_subscriptions">Подписки</string>
     <string name="nav_speed">Скорость</string>
     <string name="nav_home">Главная</string>
     <string name="nav_settings">Настройки</string>

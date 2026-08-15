@@ -126,6 +126,7 @@ private val Border = Color(0xFF343936)
 private val Danger = Color(0xFFFF6B78)
 
 internal data class DashboardStrings(
+    val subscriptions: String,
     val speed: String,
     val home: String,
     val settings: String,
@@ -158,6 +159,7 @@ internal data class DashboardStrings(
 
 @Composable
 internal fun dashboardStrings() = DashboardStrings(
+    subscriptions = stringResource(com.envy.dualcorevpn.R.string.nav_subscriptions),
     speed = stringResource(com.envy.dualcorevpn.R.string.nav_speed),
     home = stringResource(com.envy.dualcorevpn.R.string.nav_home),
     settings = stringResource(com.envy.dualcorevpn.R.string.nav_settings),
@@ -189,7 +191,7 @@ internal fun dashboardStrings() = DashboardStrings(
 )
 
 @Composable
-internal fun DashboardHeader() {
+internal fun DashboardHeader(onAdd: (() -> Unit)? = null, addEnabled: Boolean = true) {
     val context = LocalContext.current
     val strings = dashboardStrings()
     val telegramUri = remember {
@@ -204,11 +206,19 @@ internal fun DashboardHeader() {
     ) {
         Text("MaxSpeedVPN", color = TextMain, fontSize = 23.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.weight(1f))
-        IconButton(
-            enabled = telegramEnabled,
-            onClick = { telegramIntent?.let(context::startActivity) },
-            modifier = Modifier.semantics { contentDescription = strings.telegramNews },
-        ) { TelegramMark(Modifier.size(26.dp), if (telegramEnabled) TextMain else TextMuted) }
+        if (onAdd != null) {
+            IconButton(
+                enabled = addEnabled,
+                onClick = onAdd,
+                modifier = Modifier.semantics { contentDescription = strings.manageSubscriptions },
+            ) { Text("+", color = if (addEnabled) Mint else TextMuted, fontSize = 30.sp, lineHeight = 30.sp) }
+        } else {
+            IconButton(
+                enabled = telegramEnabled,
+                onClick = { telegramIntent?.let(context::startActivity) },
+                modifier = Modifier.semantics { contentDescription = strings.telegramNews },
+            ) { TelegramMark(Modifier.size(26.dp), if (telegramEnabled) TextMain else TextMuted) }
+        }
     }
 }
 
@@ -217,36 +227,95 @@ internal fun HomeDashboard(
     state: VpnSessionState,
     selected: ServerProfile?,
     servers: List<ServerProfile>,
-    subscriptions: List<Subscription>,
     onConnect: (String) -> Unit,
     onDisconnect: () -> Unit,
     onSelect: (ServerProfile) -> Unit,
+    latencyResults: Map<String, ServerLatencyResult>,
+    latencyTesting: Boolean,
+    latencyTestingIds: Set<String>,
+    onTestLatency: () -> Unit,
+    onTestServerLatency: (ServerProfile) -> Unit,
     onManageSubscriptions: () -> Unit,
 ) {
     val strings = dashboardStrings()
     val connected = state is VpnSessionState.Connected
     val busy = state is VpnSessionState.Connecting || state is VpnSessionState.Disconnecting
     val rates by VpnTrafficStore.state.collectAsState()
+    var speedSnapshot by remember { mutableStateOf(SpeedTestSnapshot()) }
+    var speedError by remember { mutableStateOf<String?>(null) }
+    var speedConfirm by remember { mutableStateOf(false) }
+    val speedScope = rememberCoroutineScope()
+    val speedContext = LocalContext.current
+    val speedRunning = speedSnapshot.phase == SpeedTestPhase.DOWNLOAD || speedSnapshot.phase == SpeedTestPhase.UPLOAD
+    val startSpeedTest = {
+        speedConfirm = false
+        speedError = null
+        speedScope.launch {
+            runCatching { NetworkSpeedTester().run { value -> speedScope.launch { speedSnapshot = value } } }
+                .onFailure { speedError = it.message ?: it.javaClass.simpleName; speedSnapshot = SpeedTestSnapshot() }
+        }
+        Unit
+    }
     Column(Modifier.fillMaxSize().background(Bg)) {
         DashboardHeader()
-        Column(
+        androidx.compose.foundation.lazy.LazyColumn(
             modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            contentPadding = PaddingValues(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MetricCard(strings.download, rates.downloadBytesPerSecond, Modifier.weight(1f))
-                MetricCard(strings.upload, rates.uploadBytesPerSecond, Modifier.weight(1f))
+            item {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    MetricCard(
+                        label = strings.download,
+                        bytesPerSecond = rates.downloadBytesPerSecond,
+                        modifier = Modifier.weight(1f),
+                        testSnapshot = speedSnapshot,
+                        testError = speedError,
+                        enabled = !speedRunning,
+                        onClick = { speedConfirm = true },
+                    )
+                    MetricCard(
+                        label = strings.upload,
+                        bytesPerSecond = rates.uploadBytesPerSecond,
+                        modifier = Modifier.weight(1f),
+                        testSnapshot = speedSnapshot,
+                        testError = speedError,
+                        enabled = !speedRunning,
+                        onClick = { speedConfirm = true },
+                    )
+                }
             }
-            Spacer(Modifier.weight(1f))
-            ConnectionControl(
-                state = state,
-                enabled = selected != null || connected || busy,
-                onClick = { if (connected || busy) onDisconnect() else selected?.let { onConnect(it.config) } },
-            )
-            Spacer(Modifier.height(26.dp))
-            ServerSlider(selected, servers, subscriptions, onSelect, onManageSubscriptions)
-            Spacer(Modifier.height(8.dp))
+            item {
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    ConnectionControl(
+                        state = state,
+                        enabled = selected != null || connected || busy,
+                        onClick = { if (connected || busy) onDisconnect() else selected?.let { onConnect(it.config) } },
+                    )
+                }
+            }
+            item { SectionTitle(strings.servers, latencyTesting, onTestLatency) }
+            item {
+                if (servers.isEmpty()) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().clickable(onClick = onManageSubscriptions),
+                        shape = RoundedCornerShape(18.dp), color = Panel, border = BorderStroke(1.dp, Mint.copy(alpha = .62f)),
+                    ) { Text(strings.noServers, color = Mint, modifier = Modifier.padding(18.dp), fontWeight = FontWeight.SemiBold) }
+                } else {
+                    ServerListCard(servers, selected, latencyResults, latencyTestingIds, onSelect, onTestServerLatency, false)
+                }
+            }
         }
+    }
+    if (speedConfirm) {
+        val metered = speedContext.getSystemService(ConnectivityManager::class.java)?.isActiveNetworkMetered == true
+        AlertDialog(
+            onDismissRequest = { speedConfirm = false },
+            title = { Text(stringResource(R.string.speed_test_confirm_title)) },
+            text = { Text(stringResource(R.string.speed_test_confirm_body, if (metered) stringResource(R.string.speed_test_metered_note) else "")) },
+            confirmButton = { TextButton(onClick = startSpeedTest) { Text(stringResource(R.string.speed_test_start)) } },
+            dismissButton = { TextButton(onClick = { speedConfirm = false }) { Text(stringResource(R.string.speed_test_cancel)) } },
+        )
     }
 }
 
@@ -344,12 +413,32 @@ private fun formatBytes(bytes: Long): String {
 }
 
 @Composable
-private fun MetricCard(label: String, bytesPerSecond: Long, modifier: Modifier) {
-    val (value, unit) = formatRate(bytesPerSecond)
+private fun MetricCard(
+    label: String,
+    bytesPerSecond: Long,
+    modifier: Modifier,
+    testSnapshot: SpeedTestSnapshot,
+    testError: String?,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val testValue = when (label) {
+        dashboardStrings().download -> testSnapshot.downloadMbps
+        else -> testSnapshot.uploadMbps
+    }
+    val testingThis = when (label) {
+        dashboardStrings().download -> testSnapshot.phase == SpeedTestPhase.DOWNLOAD
+        else -> testSnapshot.phase == SpeedTestPhase.UPLOAD
+    }
+    val (value, unit) = if (testingThis || testValue != null) {
+        (testValue ?: testSnapshot.megabitsPerSecond).roundToInt().toString() to "Mbps"
+    } else {
+        formatRate(bytesPerSecond)
+    }
     var history by remember { mutableStateOf(List(12) { 0L }) }
     LaunchedEffect(bytesPerSecond) { history = (history + bytesPerSecond).takeLast(12) }
     Card(
-        modifier = modifier.height(132.dp),
+        modifier = modifier.height(132.dp).clickable(enabled = enabled, onClick = onClick),
         shape = RoundedCornerShape(20.dp),
         border = BorderStroke(1.dp, Border),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
@@ -359,12 +448,18 @@ private fun MetricCard(label: String, bytesPerSecond: Long, modifier: Modifier) 
                 .background(Brush.linearGradient(listOf(Color(0xFF1B1F1D), PanelHigh)))
                 .padding(horizontal = 15.dp, vertical = 14.dp),
         ) {
-            Text(label, color = TextMuted, fontSize = 12.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(label, color = TextMuted, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                if (testingThis) CircularProgressIndicator(Modifier.size(14.dp), color = Mint, strokeWidth = 2.dp)
+            }
             Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(top = 2.dp)) {
                 Text(value, color = TextMain, fontSize = 26.sp, fontWeight = FontWeight.Bold)
                 Text(unit, color = TextMuted, fontSize = 11.sp, modifier = Modifier.padding(start = 3.dp, bottom = 4.dp))
             }
-            Spacer(Modifier.height(5.dp))
+            if (testError != null) {
+                Text(testError, color = Danger, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Spacer(Modifier.height(3.dp))
             MiniWave(history, Modifier.fillMaxWidth().weight(1f))
         }
     }
@@ -431,143 +526,6 @@ private fun ConnectionControl(state: VpnSessionState, enabled: Boolean, onClick:
     }
 }
 
-@Composable
-private fun ServerSlider(
-    selected: ServerProfile?,
-    servers: List<ServerProfile>,
-    subscriptions: List<Subscription>,
-    onSelect: (ServerProfile) -> Unit,
-    onManageSubscriptions: () -> Unit,
-) {
-    val strings = dashboardStrings()
-    val haptic = LocalHapticFeedback.current
-    val scope = rememberCoroutineScope()
-    Card(
-        modifier = Modifier.fillMaxWidth().height(154.dp),
-        shape = RoundedCornerShape(24.dp),
-        border = BorderStroke(1.dp, if (servers.isEmpty()) Mint.copy(alpha = .62f) else Border),
-        colors = CardDefaults.cardColors(containerColor = Panel),
-    ) {
-        if (servers.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize().clickable(onClick = onManageSubscriptions),
-                contentAlignment = Alignment.Center,
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(
-                        modifier = Modifier.size(46.dp).background(Mint, CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) { Text("+", color = Bg, fontSize = 30.sp, fontWeight = FontWeight.Medium) }
-                    Spacer(Modifier.height(12.dp))
-                    Text(strings.noServers, color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-        } else {
-            val selectedIndex = servers.indexOfFirst { it.id == selected?.id }.coerceAtLeast(0)
-            val dragOffset = remember { Animatable(0f) }
-            var pendingDragOffset by remember { mutableFloatStateOf(0f) }
-            BoxWithConstraints(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 13.dp),
-            ) {
-                val slotWidthPx = constraints.maxWidth / 3f
-
-                fun move(step: Int) {
-                    if (step == 0 || servers.size < 2 || dragOffset.isRunning) return
-                    scope.launch {
-                        val target = -step * slotWidthPx
-                        dragOffset.animateTo(target, tween(280, easing = FastOutSlowInEasing))
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onSelect(servers[(selectedIndex + step).floorMod(servers.size)])
-                        pendingDragOffset = 0f
-                        dragOffset.snapTo(0f)
-                    }
-                }
-
-                val dragState = rememberDraggableState { delta ->
-                    // Drag callbacks may arrive faster than a coroutine can resume. Maintain the
-                    // source-of-truth offset synchronously; the visual Animatable follows it.
-                    pendingDragOffset = boundedCarouselDragOffset(pendingDragOffset, delta, slotWidthPx)
-                    scope.launch { dragOffset.snapTo(pendingDragOffset) }
-                }
-
-                Column(
-                    modifier = Modifier.fillMaxSize().draggable(
-                        state = dragState,
-                        orientation = Orientation.Horizontal,
-                        enabled = servers.size > 1,
-                        onDragStarted = { pendingDragOffset = dragOffset.value },
-                        onDragStopped = { velocity ->
-                            val step = carouselStep(pendingDragOffset, velocity, slotWidthPx)
-                            if (step == 0) scope.launch {
-                                dragOffset.animateTo(0f, tween(220, easing = FastOutSlowInEasing))
-                                pendingDragOffset = 0f
-                            } else move(step)
-                        },
-                    ),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Box(Modifier.fillMaxWidth().height(58.dp)) {
-                        (if (servers.size == 1) listOf(0) else (-2..2).toList()).forEach { relative ->
-                            val server = servers[(selectedIndex + relative).floorMod(servers.size)]
-                            Box(
-                                modifier = Modifier.align(Alignment.Center).size(54.dp).graphicsLayer {
-                                    val x = relative * slotWidthPx + dragOffset.value
-                                    translationX = x
-                                    val distance = (abs(x) / slotWidthPx).coerceIn(0f, 1f)
-                                    val scale = 1f - distance * .26f
-                                    scaleX = scale
-                                    scaleY = scale
-                                    alpha = 1f - distance * .58f
-                                }.clickable { move(relative.coerceIn(-1, 1)) },
-                                contentAlignment = Alignment.Center,
-                            ) { Text(serverFlag(server), fontSize = 34.sp) }
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        IconButton(onClick = { move(-1) }, enabled = servers.size > 1, modifier = Modifier.size(28.dp)) {
-                            Text("‹", color = TextMuted, fontSize = 26.sp)
-                        }
-                        IconButton(onClick = { move(1) }, enabled = servers.size > 1, modifier = Modifier.size(28.dp)) {
-                            Text("›", color = TextMuted, fontSize = 26.sp)
-                        }
-                    }
-                    val current = servers[selectedIndex]
-                    val currentDescription = subscriptions.firstOrNull { it.id == current.subscriptionId }?.name.orEmpty()
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(
-                            localizedServerName(serverDisplayName(current.name)),
-                            color = TextMain,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (currentDescription.isNotBlank()) Text(currentDescription, color = Mint, fontSize = 11.sp, maxLines = 1)
-                    }
-                }
-            }
-        }
-    }
-}
-
-internal fun carouselStep(offsetPx: Float, velocityPxPerSecond: Float, slotWidthPx: Float): Int {
-    if (slotWidthPx <= 0f) return 0
-    val swipedLeft = offsetPx <= -slotWidthPx * .22f || velocityPxPerSecond <= -650f
-    val swipedRight = offsetPx >= slotWidthPx * .22f || velocityPxPerSecond >= 650f
-    return when {
-        swipedLeft -> 1
-        swipedRight -> -1
-        else -> 0
-    }
-}
-
-internal fun boundedCarouselDragOffset(current: Float, delta: Float, slotWidthPx: Float): Float =
-    if (slotWidthPx > 0f) (current + delta).coerceIn(-slotWidthPx, slotWidthPx) else current
-
-private fun Int.floorMod(modulus: Int): Int = ((this % modulus) + modulus) % modulus
-
 internal data class ServerSections(
     val base: List<ServerProfile>,
     val plus: List<ServerProfile>,
@@ -576,7 +534,7 @@ internal data class ServerSections(
 )
 
 internal fun planServerSections(servers: List<ServerProfile>, subscriptions: List<Subscription>, managedHosts: String): ServerSections {
-    val hosts = managedHosts.split(',').map { it.trim().lowercase() }.filter { it.isNotBlank() }.toSet()
+    val hosts = managedHosts.split(',').map { it.trim().lowercase() }.filter(String::isNotBlank).toSet()
     val managedIds = subscriptions.filter { subscription ->
         runCatching { URI(subscription.url).host?.lowercase() in hosts }.getOrDefault(false)
     }.mapTo(mutableSetOf()) { it.id }
@@ -584,166 +542,6 @@ internal fun planServerSections(servers: List<ServerProfile>, subscriptions: Lis
     val owned = servers.filter { it.subscriptionId in managedIds }
     val plus = owned.filter { it.name.startsWith("[plus]", true) || it.name.startsWith("plus:", true) }
     return ServerSections(owned - plus.toSet(), plus, servers.filterNot { it.subscriptionId in managedIds }, true)
-}
-
-@Composable
-internal fun SpeedDashboard(
-    state: VpnSessionState,
-    selected: ServerProfile?,
-    servers: List<ServerProfile>,
-    subscriptions: List<Subscription>,
-    latencyResults: Map<String, ServerLatencyResult>,
-    latencyTesting: Boolean,
-    latencyTestingIds: Set<String>,
-    onTestLatency: () -> Unit,
-    onTestServerLatency: (ServerProfile) -> Unit,
-    onSelect: (ServerProfile) -> Unit,
-    onManageSubscriptions: () -> Unit,
-) {
-    val strings = dashboardStrings()
-    val rates by VpnTrafficStore.state.collectAsState()
-    val sections = remember(servers, subscriptions) { planServerSections(servers, subscriptions, BuildConfig.MAXSPEED_SUBSCRIPTION_HOSTS) }
-    Column(Modifier.fillMaxSize().background(Bg)) {
-        DashboardHeader()
-        androidx.compose.foundation.lazy.LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp),
-            contentPadding = PaddingValues(bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-        item { SpeedGauge(rates.downloadBytesPerSecond, strings) }
-        if (sections.managed) {
-            if (sections.base.isNotEmpty()) { item { SectionTitle(strings.baseServers, latencyTesting, onTestLatency) }; item { ServerListCard(sections.base, selected, latencyResults, latencyTestingIds, onSelect, onTestServerLatency, false) } }
-            if (sections.plus.isNotEmpty()) { item { SectionTitle(strings.plusServers) }; item { ServerListCard(sections.plus, selected, latencyResults, latencyTestingIds, onSelect, onTestServerLatency, true) } }
-            if (sections.others.isNotEmpty()) { item { SectionTitle(strings.otherServers) }; item { ServerListCard(sections.others, selected, latencyResults, latencyTestingIds, onSelect, onTestServerLatency, false) } }
-        } else {
-            item { SectionTitle(strings.servers, latencyTesting, onTestLatency) }
-            item { ServerListCard(sections.base, selected, latencyResults, latencyTestingIds, onSelect, onTestServerLatency, false) }
-        }
-        item {
-            Surface(
-                modifier = Modifier.fillMaxWidth().clickable(onClick = onManageSubscriptions),
-                shape = RoundedCornerShape(18.dp), color = Panel, border = BorderStroke(1.dp, Border),
-            ) { Text(strings.manageSubscriptions, color = Mint, modifier = Modifier.padding(17.dp), fontWeight = FontWeight.SemiBold) }
-        }
-        item { Spacer(Modifier.height(10.dp)) }
-        }
-    }
-}
-
-internal fun speedScaleMbps(megabitsPerSecond: Double): Int = when {
-    megabitsPerSecond <= 1.0 -> 1
-    megabitsPerSecond <= 10.0 -> 10
-    megabitsPerSecond <= 100.0 -> 100
-    megabitsPerSecond <= 500.0 -> 500
-    else -> 1_000
-}
-
-internal fun formatSpeedMbps(megabitsPerSecond: Double, scale: Int): String = when {
-    megabitsPerSecond == 0.0 -> "0"
-    scale <= 1 -> "%.2f".format(java.util.Locale.ROOT, megabitsPerSecond)
-    scale <= 10 -> "%.1f".format(java.util.Locale.ROOT, megabitsPerSecond)
-    else -> "%.0f".format(java.util.Locale.ROOT, megabitsPerSecond)
-}
-
-internal fun formatSpeedTick(value: Double, scale: Int): String = when {
-    scale <= 1 && (value == 0.0 || value == 1.0) -> "%.0f".format(java.util.Locale.ROOT, value)
-    scale <= 1 -> "%.1f".format(java.util.Locale.ROOT, value)
-    else -> "%.0f".format(java.util.Locale.ROOT, value)
-}
-
-@Composable
-private fun SpeedGauge(bytesPerSecond: Long, strings: DashboardStrings) {
-    var snapshot by remember { mutableStateOf(SpeedTestSnapshot()) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var confirm by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    val context = LocalContext.current
-    val running = snapshot.phase == SpeedTestPhase.DOWNLOAD || snapshot.phase == SpeedTestPhase.UPLOAD
-    val liveMbps = bytesPerSecond * 8.0 / 1_000_000.0
-    val mbps = if (snapshot.phase == SpeedTestPhase.IDLE) liveMbps else snapshot.megabitsPerSecond
-    val scale = speedScaleMbps(mbps)
-    val targetProgress = (mbps / scale).coerceIn(0.0, 1.0).toFloat()
-    val progress by animateFloatAsState(targetProgress, tween(260), label = "gaugeNeedle")
-    val phaseLabel = when (snapshot.phase) {
-        SpeedTestPhase.DOWNLOAD -> strings.download
-        SpeedTestPhase.UPLOAD -> strings.upload
-        SpeedTestPhase.COMPLETE -> "${strings.download} ${snapshot.downloadMbps?.roundToInt()} · ${strings.upload} ${snapshot.uploadMbps?.roundToInt()}"
-        SpeedTestPhase.IDLE -> strings.speedSubtitle
-    }
-    val runTest = {
-        confirm = false
-        error = null
-        scope.launch {
-            runCatching { NetworkSpeedTester().run { value -> scope.launch { snapshot = value } } }
-                .onFailure { error = it.message ?: it.javaClass.simpleName; snapshot = SpeedTestSnapshot() }
-        }
-        Unit
-    }
-    Card(
-        modifier = Modifier.fillMaxWidth().height(257.dp).clickable(enabled = !running) { confirm = true },
-        shape = RoundedCornerShape(24.dp),
-        border = BorderStroke(1.dp, Border),
-        colors = CardDefaults.cardColors(containerColor = Panel),
-    ) {
-        Box(Modifier.fillMaxSize().padding(18.dp), contentAlignment = Alignment.Center) {
-            Canvas(Modifier.fillMaxWidth().height(176.dp).align(Alignment.TopCenter)) {
-                val stroke = 13.dp.toPx()
-                val radius = size.width / 2 - 28.dp.toPx()
-                val center = Offset(size.width / 2, size.height - 22.dp.toPx())
-                val arcTopLeft = Offset(center.x - radius, center.y - radius)
-                val arcSize = Size(radius * 2, radius * 2)
-                drawArc(Border, 180f, 180f, false, arcTopLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
-                drawArc(Mint, 180f, 180f * progress, false, arcTopLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
-                val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = android.graphics.Color.rgb(154, 161, 157)
-                    textSize = 10.sp.toPx()
-                    textAlign = Paint.Align.CENTER
-                }
-                repeat(11) { index ->
-                    val angle = Math.toRadians((180 + index * 18).toDouble())
-                    val outer = radius - 14.dp.toPx()
-                    val inner = outer - if (index % 2 == 0) 10.dp.toPx() else 6.dp.toPx()
-                    drawLine(TextMuted, Offset(center.x + cos(angle).toFloat() * inner, center.y + sin(angle).toFloat() * inner), Offset(center.x + cos(angle).toFloat() * outer, center.y + sin(angle).toFloat() * outer), 1.dp.toPx())
-                    if (index % 2 == 0) {
-                        val value = scale * index / 10.0
-                        val labelRadius = radius - 42.dp.toPx()
-                        val x = center.x + cos(angle).toFloat() * labelRadius
-                        val y = center.y + sin(angle).toFloat() * labelRadius - (paint.ascent() + paint.descent()) / 2
-                        drawContext.canvas.nativeCanvas.drawText(formatSpeedTick(value, scale), x, y, paint)
-                    }
-                }
-                val needleAngle = Math.toRadians((180 + 180 * progress).toDouble())
-                val needleRadius = radius - 48.dp.toPx()
-                drawLine(Mint, center, Offset(center.x + cos(needleAngle).toFloat() * needleRadius, center.y + sin(needleAngle).toFloat() * needleRadius), 4.dp.toPx(), StrokeCap.Round)
-                drawCircle(PanelHigh, 10.dp.toPx(), center)
-                drawCircle(Mint, 3.dp.toPx(), center)
-            }
-            Column(Modifier.align(Alignment.BottomCenter), horizontalAlignment = Alignment.CenterHorizontally) {
-                if (running) CircularProgressIndicator(Modifier.size(20.dp), color = Mint, strokeWidth = 2.dp)
-                Text(formatSpeedMbps(mbps, scale), color = TextMain, fontSize = 37.sp, fontWeight = FontWeight.Bold)
-                Text(error ?: "Mbps · $phaseLabel", color = if (error == null) TextMuted else Color(0xFFFF7A7A), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        }
-    }
-    if (confirm) {
-        val metered = context.getSystemService(ConnectivityManager::class.java)?.isActiveNetworkMetered == true
-        AlertDialog(
-            onDismissRequest = { confirm = false },
-            title = { Text(stringResource(R.string.speed_test_confirm_title)) },
-            text = {
-                Text(
-                    stringResource(
-                        R.string.speed_test_confirm_body,
-                        if (metered) stringResource(R.string.speed_test_metered_note) else "",
-                    ),
-                )
-            },
-            confirmButton = { TextButton(onClick = runTest) { Text(stringResource(R.string.speed_test_start)) } },
-            dismissButton = {
-                TextButton(onClick = { confirm = false }) { Text(stringResource(R.string.speed_test_cancel)) }
-            },
-        )
-    }
 }
 
 @Composable

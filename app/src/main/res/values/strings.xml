@@ -9,6 +9,7 @@
     <string name="disconnect">Disconnect</string>
     <string name="notification_stop">Stop</string>
 
+    <string name="nav_subscriptions">Subscriptions</string>
     <string name="nav_speed">Speed</string>
     <string name="nav_home">Home</string>
     <string name="nav_settings">Settings</string>
