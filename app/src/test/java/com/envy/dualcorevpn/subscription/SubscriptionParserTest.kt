@@ -117,9 +117,36 @@ class SubscriptionParserTest {
     }
 
     @Test
-    fun `rejects unsupported xhttp extra instead of silently dropping it`() {
+    fun `imports Xray PR 5414 xhttp extra options`() {
+        val extra = Base64.getUrlEncoder().withoutPadding().encodeToString(
+            """{"xPaddingBytes":"100-1000","xPaddingObfsMode":true,"xPaddingKey":"cache_buster","xPaddingHeader":"X-Signature","xPaddingPlacement":"query","xPaddingMethod":"tokenish","uplinkHTTPMethod":"PUT","sessionPlacement":"header","sessionKey":"X-Session-Id","seqPlacement":"header","seqKey":"X-Sequence","uplinkDataPlacement":"header","uplinkDataKey":"X-Payload","uplinkChunkSize":"4096"}""".toByteArray(),
+        )
+        val profile = SubscriptionParser.parse(
+            "subscription",
+            "vless://11111111-1111-1111-1111-111111111111@xhttp.example:443?security=tls&type=xhttp&extra=$extra",
+        ).single()
+        val xhttp = JSONObject(profile.config).getJSONArray("outbounds").getJSONObject(0)
+            .getJSONObject("streamSettings").getJSONObject("xhttpSettings")
+
+        assertTrue(xhttp.getBoolean("xPaddingObfsMode"))
+        assertEquals("cache_buster", xhttp.getString("xPaddingKey"))
+        assertEquals("X-Signature", xhttp.getString("xPaddingHeader"))
+        assertEquals("query", xhttp.getString("xPaddingPlacement"))
+        assertEquals("tokenish", xhttp.getString("xPaddingMethod"))
+        assertEquals("PUT", xhttp.getString("uplinkHTTPMethod"))
+        assertEquals("header", xhttp.getString("sessionPlacement"))
+        assertEquals("X-Session-Id", xhttp.getString("sessionKey"))
+        assertEquals("header", xhttp.getString("seqPlacement"))
+        assertEquals("X-Sequence", xhttp.getString("seqKey"))
+        assertEquals("header", xhttp.getString("uplinkDataPlacement"))
+        assertEquals("X-Payload", xhttp.getString("uplinkDataKey"))
+        assertEquals("4096", xhttp.getString("uplinkChunkSize"))
+    }
+
+    @Test
+    fun `still rejects unrelated XHTTP extra options`() {
         val extra = Base64.getUrlEncoder().withoutPadding()
-            .encodeToString("""{"xPaddingBytes":"100-1000","xmux":{"maxConcurrency":"4"}}""".toByteArray())
+            .encodeToString("""{"xmux":{"maxConcurrency":"4"}}""".toByteArray())
         val report = SubscriptionParser.parseReport(
             "subscription",
             "vless://11111111-1111-1111-1111-111111111111@xhttp.example:443?security=tls&type=xhttp&extra=$extra",

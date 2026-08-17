@@ -19,7 +19,7 @@ class VpnSettingsRepository(context: Context) {
         }.getOrDefault(RoutingMode.ALL),
         routingRules = preferences.getString(KEY_ROUTING_RULES, "") ?: "",
         smartConnectEnabled = preferences.getBoolean(KEY_SMART_CONNECT, false),
-        subscriptionRefreshHours = preferences.getInt(KEY_SUBSCRIPTION_REFRESH_HOURS, 0),
+        pingOnLaunchEnabled = preferences.getBoolean(KEY_PING_ON_LAUNCH, true),
         splitTunnelMode = runCatching {
             SplitTunnelMode.valueOf(preferences.getString(KEY_SPLIT_TUNNEL_MODE, SplitTunnelMode.OFF.name) ?: SplitTunnelMode.OFF.name)
         }.getOrDefault(SplitTunnelMode.OFF),
@@ -35,7 +35,7 @@ class VpnSettingsRepository(context: Context) {
             .putString(KEY_ROUTING_MODE, settings.routingMode.name)
             .putString(KEY_ROUTING_RULES, settings.routingRules)
             .putBoolean(KEY_SMART_CONNECT, settings.smartConnectEnabled)
-            .putInt(KEY_SUBSCRIPTION_REFRESH_HOURS, settings.subscriptionRefreshHours)
+            .putBoolean(KEY_PING_ON_LAUNCH, settings.pingOnLaunchEnabled)
             .putString(KEY_SPLIT_TUNNEL_MODE, settings.splitTunnelMode.name)
             .putStringSet(KEY_SPLIT_TUNNEL_PACKAGES, settings.splitTunnelPackages)
             .commit()) { "VPN settings could not be persisted" }
@@ -49,7 +49,7 @@ class VpnSettingsRepository(context: Context) {
         const val KEY_ROUTING_MODE = "routing_mode"
         const val KEY_ROUTING_RULES = "routing_rules"
         const val KEY_SMART_CONNECT = "smart_connect"
-        const val KEY_SUBSCRIPTION_REFRESH_HOURS = "subscription_refresh_hours"
+        const val KEY_PING_ON_LAUNCH = "ping_on_launch"
         const val KEY_SPLIT_TUNNEL_MODE = "split_tunnel_mode"
         const val KEY_SPLIT_TUNNEL_PACKAGES = "split_tunnel_packages"
     }

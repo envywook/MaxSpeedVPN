@@ -94,15 +94,12 @@ internal fun AdvancedFeaturesScreen(
         }
         item {
             FeatureCard {
-                Text(stringResource(R.string.auto_refresh_title), color = Color.White, fontWeight = FontWeight.SemiBold)
-                Text(stringResource(R.string.auto_refresh_description), color = Color(0xFFA0A5A2), fontSize = 11.sp)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    listOf(0, 6, 12, 24).forEach { hours ->
-                        OutlinedButton(
-                            onClick = { settings = settings.copy(subscriptionRefreshHours = hours) },
-                            modifier = Modifier.weight(1f),
-                        ) { Text(if (hours == 0) stringResource(R.string.off) else "${hours}h", color = if (settings.subscriptionRefreshHours == hours) Color(0xFFA6F3D1) else Color.White) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Проверять серверы при запуске", color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Text("HTTP GET для всех серверов после открытия приложения", color = Color(0xFFA0A5A2), fontSize = 11.sp)
                     }
+                    Switch(checked = settings.pingOnLaunchEnabled, onCheckedChange = { settings = settings.copy(pingOnLaunchEnabled = it) })
                 }
             }
         }

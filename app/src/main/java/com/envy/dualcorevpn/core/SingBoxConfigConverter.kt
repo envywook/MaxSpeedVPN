@@ -157,6 +157,7 @@ object SingBoxConfigConverter {
             }
             "xhttp" -> {
                 val xhttp = stream.optJSONObject("xhttpSettings") ?: JSONObject()
+                xhttp.requireOnlySupported(setOf("host", "path", "mode", "xPaddingBytes"), "XHTTP settings for sing-box")
                 outbound.put("transport", JSONObject().apply {
                     put("type", "xhttp")
                     put("mode", xhttp.optString("mode", "auto"))

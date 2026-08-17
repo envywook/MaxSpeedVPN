@@ -12,7 +12,7 @@ data class VpnSettings(
     val routingMode: RoutingMode = RoutingMode.ALL,
     val routingRules: String = "",
     val smartConnectEnabled: Boolean = false,
-    val subscriptionRefreshHours: Int = 0,
+    val pingOnLaunchEnabled: Boolean = true,
     val splitTunnelMode: SplitTunnelMode = SplitTunnelMode.OFF,
     val splitTunnelPackages: Set<String> = emptySet(),
 ) {
@@ -30,7 +30,7 @@ data class VpnSettings(
             routingMode: RoutingMode = RoutingMode.ALL,
             routingRules: String = "",
             smartConnectEnabled: Boolean = false,
-            subscriptionRefreshHours: Int = 0,
+            pingOnLaunchEnabled: Boolean = true,
             splitTunnelMode: SplitTunnelMode = SplitTunnelMode.OFF,
             splitTunnelPackages: Set<String> = emptySet(),
         ): VpnSettings {
@@ -48,7 +48,7 @@ data class VpnSettings(
                 ""
             }
             RoutingPolicy.parse(routingMode, normalizedRules)
-            require(subscriptionRefreshHours in setOf(0, 6, 12, 24)) { "Некорректный интервал обновления подписок" }
+
             return VpnSettings(
                 parsedMtu,
                 dns,
@@ -57,7 +57,7 @@ data class VpnSettings(
                 routingMode,
                 normalizedRules,
                 smartConnectEnabled,
-                subscriptionRefreshHours,
+                pingOnLaunchEnabled,
                 splitTunnelMode,
                 splitTunnelPackages.filter(String::isNotBlank).toSet(),
             )

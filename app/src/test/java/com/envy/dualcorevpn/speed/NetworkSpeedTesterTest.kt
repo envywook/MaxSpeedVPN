@@ -1,6 +1,8 @@
 package com.envy.dualcorevpn.speed
 
 import java.io.BufferedInputStream
+import java.net.Proxy
+import java.net.URL
 import java.net.ServerSocket
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.concurrent.thread
@@ -51,6 +53,7 @@ class NetworkSpeedTesterTest {
             val phases = mutableListOf<SpeedTestPhase>()
             val result = NetworkSpeedTester(
                 baseUrl = "http://127.0.0.1:${server.localPort}",
+                proxy = Proxy.NO_PROXY,
                 downloadBytes = 32 * 1024,
                 uploadBytes = 24 * 1024,
             ).run { phases += it.phase }
@@ -63,6 +66,52 @@ class NetworkSpeedTesterTest {
             assertNotNull(result.uploadMbps)
             assertEquals(SpeedTestPhase.DOWNLOAD, phases.first())
             assertEquals(SpeedTestPhase.COMPLETE, phases.last())
+        } finally {
+            server.close()
+        }
+    }
+
+    @Test
+    fun `opens every speed-test request through configured proxy`() = runBlocking {
+        val server = ServerSocket(0)
+        val opened = CopyOnWriteArrayList<Proxy>()
+        val worker = thread(name = "speed-test-server") {
+            repeat(2) {
+                server.accept().use { socket ->
+                    val input = BufferedInputStream(socket.getInputStream())
+                    val headers = readHeaders(input)
+                    if (headers.startsWith("GET /__down")) {
+                        val body = ByteArray(1024) { 1 }
+                        socket.getOutputStream().apply {
+                            write("HTTP/1.1 200 OK\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n".toByteArray())
+                            write(body)
+                            flush()
+                        }
+                    } else {
+                        val length = Regex("(?i)Content-Length: (\\d+)").find(headers)?.groupValues?.get(1)?.toInt() ?: 0
+                        input.skip(length.toLong())
+                        socket.getOutputStream().apply {
+                            write("HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
+                            flush()
+                        }
+                    }
+                }
+            }
+        }
+        val proxy = Proxy(Proxy.Type.SOCKS, java.net.InetSocketAddress("127.0.0.1", 10808))
+        try {
+            NetworkSpeedTester(
+                baseUrl = "http://127.0.0.1:${server.localPort}",
+                proxy = proxy,
+                downloadBytes = 1024,
+                uploadBytes = 512,
+                connectionOpener = { url: URL, configuredProxy: Proxy ->
+                    opened += configuredProxy
+                    url.openConnection(Proxy.NO_PROXY) as java.net.HttpURLConnection
+                },
+            ).run {}
+            worker.join(2_000)
+            assertEquals(listOf(proxy, proxy), opened)
         } finally {
             server.close()
         }

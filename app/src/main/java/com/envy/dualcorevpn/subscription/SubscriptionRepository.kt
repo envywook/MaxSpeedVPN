@@ -399,12 +399,13 @@ object SubscriptionParser {
             }
             else -> parseShadowsocksSettings(source, address, port)
         }
+        val xhttpOptions = parseXhttpOptions(query["extra"])
         return profile(subscriptionId, name, protocol, address, port, settings, streamSettings(
             network = query["type"] ?: "tcp", security = query["security"] ?: if (protocol == "trojan") "tls" else "",
             host = query["host"] ?: "", path = query["path"] ?: "", sni = query["sni"] ?: query["serverName"] ?: "",
             fingerprint = query["fp"] ?: "", publicKey = query["pbk"] ?: "", shortId = query["sid"] ?: "",
             xhttpMode = query["mode"] ?: "",
-            xhttpPadding = parseXhttpPadding(query["extra"]),
+            xhttpOptions = xhttpOptions,
         ))
     }
 
@@ -620,7 +621,7 @@ object SubscriptionParser {
         publicKey: String,
         shortId: String,
         xhttpMode: String = "",
-        xhttpPadding: String = "",
+        xhttpOptions: JSONObject = JSONObject(),
     ): JSONObject = JSONObject().apply {
         put("network", network.ifBlank { "tcp" })
         if (security.isNotBlank() && security != "none") {
@@ -638,26 +639,29 @@ object SubscriptionParser {
             if (host.isNotBlank()) put("headers", JSONObject().put("Host", host))
         })
         if (network == "grpc") put("grpcSettings", JSONObject().put("serviceName", path.removePrefix("/")))
-        if (network == "xhttp") put("xhttpSettings", JSONObject().apply {
+        if (network == "xhttp") put("xhttpSettings", JSONObject(xhttpOptions.toString()).apply {
             if (host.isNotBlank()) put("host", host)
             if (path.isNotBlank()) put("path", path)
             if (xhttpMode.isNotBlank()) put("mode", xhttpMode)
-            if (xhttpPadding.isNotBlank()) put("xPaddingBytes", xhttpPadding)
         })
     }
 
-    private fun parseXhttpPadding(extra: String?): String {
-        if (extra.isNullOrBlank()) return ""
+    private fun parseXhttpOptions(extra: String?): JSONObject {
+        if (extra.isNullOrBlank()) return JSONObject()
         val normalized = extra.trim().replace('-', '+').replace('_', '/').let {
             it + "=".repeat((4 - it.length % 4) % 4)
         }
-        val decoded = String(java.util.Base64.getDecoder().decode(normalized), StandardCharsets.UTF_8)
-        val options = JSONObject(decoded)
-        val unsupported = options.keys().asSequence().filterNot { it == "xPaddingBytes" }.toList()
+        val options = JSONObject(String(java.util.Base64.getDecoder().decode(normalized), StandardCharsets.UTF_8))
+        val supported = setOf(
+            "xPaddingBytes", "xPaddingObfsMode", "xPaddingKey", "xPaddingHeader", "xPaddingPlacement",
+            "xPaddingMethod", "uplinkHTTPMethod", "sessionPlacement", "sessionKey", "seqPlacement", "seqKey",
+            "uplinkDataPlacement", "uplinkDataKey", "uplinkChunkSize",
+        )
+        val unsupported = options.keys().asSequence().filterNot(supported::contains).toList()
         require(unsupported.isEmpty()) {
             "Неподдерживаемые параметры XHTTP extra: ${unsupported.joinToString(", ")}"
         }
-        return options.optString("xPaddingBytes")
+        return options
     }
 
     private fun parseQueryPairs(query: String?): List<Pair<String, String>> = query.orEmpty().split('&').mapNotNull {

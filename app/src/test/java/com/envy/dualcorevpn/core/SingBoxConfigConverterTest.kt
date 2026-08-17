@@ -31,6 +31,13 @@ class SingBoxConfigConverterTest {
     }
 
     @Test
+    fun `rejects Xray PR 5414 xhttp options for sing-box conversion`() {
+        val xray = """{"outbounds":[{"tag":"proxy","protocol":"vless","settings":{"vnext":[{"address":"edge.example","port":443,"users":[{"id":"00000000-0000-0000-0000-000000000001"}]}]},"streamSettings":{"network":"xhttp","xhttpSettings":{"xPaddingKey":"cache_buster"}}}]}"""
+
+        assertTrue(runCatching { SingBoxConfigConverter.convert(xray) }.isFailure)
+    }
+
+    @Test
     fun `native mieru envelope preserves schema and normalizes tag`() {
         val envelope = """{
           "lust_format":"sing-box",

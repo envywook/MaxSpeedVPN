@@ -13,8 +13,8 @@ class ServerLatencyTesterTest {
 
     @Test
     fun `reports latency and endpoint failures independently`() = runBlocking {
-        val tester = ServerLatencyTester { host, _ ->
-            if (host.startsWith("bad")) error("unreachable")
+        val tester = ServerLatencyTester { url ->
+            if (url.contains("bad.example")) error("unreachable")
             42L
         }
 
@@ -30,7 +30,7 @@ class ServerLatencyTesterTest {
     fun `never exceeds requested concurrency`() = runBlocking {
         val active = AtomicInteger()
         val peak = AtomicInteger()
-        val tester = ServerLatencyTester { _, _ ->
+        val tester = ServerLatencyTester {
             val now = active.incrementAndGet()
             peak.updateAndGet { maxOf(it, now) }
             delay(40)
@@ -46,9 +46,8 @@ class ServerLatencyTesterTest {
 
     @Test
     fun `tests a single server without changing result shape`() = runBlocking {
-        val tester = ServerLatencyTester { host, port ->
-            assertEquals("single.example", host)
-            assertEquals(443, port)
+        val tester = ServerLatencyTester { url ->
+            assertEquals("https://single.example:443/", url)
             27L
         }
 

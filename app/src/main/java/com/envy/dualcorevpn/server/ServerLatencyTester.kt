@@ -1,8 +1,8 @@
 package com.envy.dualcorevpn.server
 
 import com.envy.dualcorevpn.subscription.ServerProfile
-import java.net.InetSocketAddress
-import java.net.Socket
+import java.net.HttpURLConnection
+import java.net.URL
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
@@ -14,8 +14,8 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeout
 
-fun interface TcpProbe {
-    suspend fun measure(host: String, port: Int): Long
+fun interface HttpProbe {
+    suspend fun measure(url: String): Long
 }
 
 data class ServerLatencyResult(
@@ -24,7 +24,7 @@ data class ServerLatencyResult(
 )
 
 class ServerLatencyTester(
-    private val probe: TcpProbe? = null,
+    private val probe: HttpProbe? = null,
 ) {
     suspend fun testOne(
         server: ServerProfile,
@@ -49,8 +49,8 @@ class ServerLatencyTester(
 
     private suspend fun measure(server: ServerProfile, timeoutMillis: Long): ServerLatencyResult = try {
         val latency = withTimeout(timeoutMillis) {
-            probe?.measure(server.address, server.port)
-                ?: measureTcp(server.address, server.port, timeoutMillis)
+            probe?.measure(probeUrl(server))
+                ?: measureHttpGet(probeUrl(server), timeoutMillis)
         }
         ServerLatencyResult(latency, null)
     } catch (_: TimeoutCancellationException) {
@@ -61,14 +61,21 @@ class ServerLatencyTester(
         ServerLatencyResult(null, error.message ?: error.javaClass.simpleName)
     }
 
-    private suspend fun measureTcp(host: String, port: Int, timeoutMillis: Long): Long =
+    private fun probeUrl(server: ServerProfile): String = "https://${server.address}:${server.port}/"
+
+    private suspend fun measureHttpGet(url: String, timeoutMillis: Long): Long =
         runInterruptible(Dispatchers.IO) {
             val started = System.nanoTime()
-            Socket().use { socket ->
-                socket.connect(
-                    InetSocketAddress(host, port),
-                    timeoutMillis.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
-                )
+            (URL(url).openConnection() as HttpURLConnection).run {
+                requestMethod = "GET"
+                connectTimeout = timeoutMillis.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                readTimeout = connectTimeout
+                instanceFollowRedirects = false
+                try {
+                    responseCode
+                } finally {
+                    disconnect()
+                }
             }
             (System.nanoTime() - started) / 1_000_000
         }

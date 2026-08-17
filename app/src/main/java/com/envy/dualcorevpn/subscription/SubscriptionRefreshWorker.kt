@@ -68,13 +68,9 @@ class SubscriptionRefreshWorker(
         private const val CHANNEL_ID = "subscription-refresh"
         private const val NOTIFICATION_ID = 47
 
-        fun schedule(context: Context, hours: Int) {
+        fun schedule(context: Context) {
             val manager = WorkManager.getInstance(context)
-            if (hours <= 0) {
-                manager.cancelUniqueWork(WORK_NAME)
-                return
-            }
-            val request = PeriodicWorkRequestBuilder<SubscriptionRefreshWorker>(hours.toLong(), TimeUnit.HOURS)
+            val request = PeriodicWorkRequestBuilder<SubscriptionRefreshWorker>(1, TimeUnit.HOURS)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .build()
             manager.enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.UPDATE, request)

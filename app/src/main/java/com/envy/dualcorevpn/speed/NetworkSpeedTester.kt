@@ -1,6 +1,7 @@
 package com.envy.dualcorevpn.speed
 
 import java.net.HttpURLConnection
+import java.net.Proxy
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
@@ -19,7 +20,11 @@ data class SpeedTestSnapshot(
 
 class NetworkSpeedTester(
     private val baseUrl: String = "https://speed.cloudflare.com",
+    private val proxy: Proxy,
     private val downloadBytes: Int = DEFAULT_DOWNLOAD_BYTES,
+    private val connectionOpener: (URL, Proxy) -> HttpURLConnection = { url, configuredProxy ->
+        url.openConnection(configuredProxy) as HttpURLConnection
+    },
     private val uploadBytes: Int = DEFAULT_UPLOAD_BYTES,
 ) {
     suspend fun run(onProgress: (SpeedTestSnapshot) -> Unit): SpeedTestSnapshot = withContext(Dispatchers.IO) {
@@ -93,7 +98,7 @@ class NetworkSpeedTester(
         return mbps(started, transferred)
     }
 
-    private fun open(url: String) = (URL(url).openConnection() as HttpURLConnection).apply {
+    private fun open(url: String) = connectionOpener(URL(url), proxy).apply {
         connectTimeout = TIMEOUT_MILLIS
         readTimeout = TIMEOUT_MILLIS
         useCaches = false
