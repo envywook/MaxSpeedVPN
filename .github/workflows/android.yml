@@ -2,7 +2,7 @@ name: Android CI and Release
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'release/**']
     tags: ['v*']
     paths-ignore:
       - 'README.md'
