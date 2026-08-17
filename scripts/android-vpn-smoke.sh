@@ -109,9 +109,24 @@ for node in ET.parse(path).getroot().iter("node"):
 else:
     raise SystemExit(1)
 PY
-)" || fail "UI action not found: $expected"
+)" || return 1
   # A merged Compose semantics node may not be clickable itself, but its center is inside the button.
   "$ADB" shell input tap $point
+}
+
+click_ui_label_with_quickstep_recovery() {
+  local expected="$1"
+  # A label can be observed immediately before the launcher ANR overlays it.
+  # Retry only that exact, documented system dialog; never suppress app failures.
+  for _ in $(seq 1 10); do
+    if click_ui_label "$expected"; then return 0; fi
+    if dismiss_quickstep_anr; then
+      sleep 1
+      continue
+    fi
+    sleep 1
+  done
+  fail "UI action not found: $expected"
 }
 
 wait_for_vpn() {
@@ -172,7 +187,7 @@ configured_engine="${configured_engine:-XRAY}"
 [[ "$configured_engine" == "$expected_engine" ]] || fail "configured engine is $configured_engine, expected $expected_engine"
 
 for cycle in 1 2; do
-  click_ui_label "$connect_label"
+  click_ui_label_with_quickstep_recovery "$connect_label"
   wait_for_ui_label "$connected_label"
   wait_for_vpn
 
