@@ -27,6 +27,7 @@ jobs:
     timeout-minutes: 45
     env:
       MAXSPEED_TELEGRAM_URL: https://t.me/ZmaxspeedvpnZ
+      GITHUB_TOKEN: ${{ github.token }}
 
     steps:
       - name: Check out source
@@ -102,6 +103,8 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
     strategy:
       fail-fast: false
       matrix:

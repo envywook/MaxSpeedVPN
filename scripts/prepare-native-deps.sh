@@ -37,6 +37,27 @@ command -v unzip >/dev/null
 command -v readelf >/dev/null
 command -v strings >/dev/null
 command -v tar >/dev/null
+
+download_release_asset() {
+  local repository="$1" tag="$2" asset_name="$3" destination="$4"
+  if [[ -z "${GITHUB_TOKEN:-}" ]]; then
+    curl -fsSL --retry 3 -o "$destination" \
+      "https://github.com/$repository/releases/download/$tag/$asset_name"
+    return
+  fi
+
+  local asset_api_url
+  asset_api_url="$(curl --http1.1 -fsSL --retry 3 \
+    -H "Authorization: Bearer $GITHUB_TOKEN" \
+    -H 'Accept: application/vnd.github+json' \
+    "https://api.github.com/repos/$repository/releases/tags/$tag" | \
+    python3 -c 'import json, sys; assets = json.load(sys.stdin)["assets"]; name = sys.argv[1]; print(next(asset["url"] for asset in assets if asset["name"] == name))' "$asset_name")"
+  curl --http1.1 -fsSL --retry 3 -o "$destination" \
+    -H "Authorization: Bearer $GITHUB_TOKEN" \
+    -H 'Accept: application/octet-stream' \
+    "$asset_api_url"
+}
+
 mkdir -p "$ROOT/app/libs" "$ROOT/app/src/main/jniLibs" "$WORK/v2rayng-apks"
 curl -fsSL --retry 3 -o "$ROOT/app/libs/libv2ray.aar" \
   "https://github.com/2dust/AndroidLibXrayLite/releases/download/$XRAY_TAG/libv2ray.aar"
@@ -58,8 +79,8 @@ for abi in "${ABIS[@]}"; do
 done
 for arch in "${SING_ARCH[@]}"; do
   archive="$WORK/sing-box-$SING_BOX_VERSION-android-$arch.tar.gz"
-  curl -fsSL --retry 3 -o "$archive" \
-    "https://github.com/$SING_BOX_REPO/releases/download/$SING_BOX_TAG/sing-box-$SING_BOX_VERSION-android-$arch.tar.gz"
+  download_release_asset "$SING_BOX_REPO" "$SING_BOX_TAG" \
+    "sing-box-$SING_BOX_VERSION-android-$arch.tar.gz" "$archive"
   echo "${SING_SHA256[$arch]}  $archive" | sha256sum -c -
   abi="${SING_ABI[$arch]}"
   dest="$ROOT/app/src/main/jniLibs/$abi/libsingbox.so"
