@@ -93,7 +93,9 @@ jobs:
           (cd dist && sha256sum *.apk | sort | tee SHA256SUMS.txt)
 
   smoke:
-    runs-on: ubuntu-latest
+    # ubuntu-24 GitHub-hosted runners currently expose no usable /dev/kvm;
+    # API 34 emulator smoke needs the hosted 22.04 image's nested KVM support.
+    runs-on: ubuntu-22.04
     timeout-minutes: 35
     env:
       GITHUB_TOKEN: ${{ github.token }}
@@ -147,7 +149,7 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
-          disable-linux-hw-accel: ${{ steps.kvm.outputs.available != 'true' }}
+          disable-linux-hw-accel: auto
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           script: |
             apk=app/build/outputs/apk/debug/app-x86_64-debug.apk
