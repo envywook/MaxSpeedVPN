@@ -54,6 +54,9 @@ wait_for_ui_label() {
   local attempts="${2:-20}"
   for _ in $(seq 1 "$attempts"); do
     if has_ui_label "$expected"; then return 0; fi
+    # The launcher ANR can arrive after tapping Connect as well as before it.
+    # Recover only this exact system dialog; any app failure remains blocking.
+    dismiss_quickstep_anr || true
     sleep 1
   done
   fail "UI did not reach label: $expected"
