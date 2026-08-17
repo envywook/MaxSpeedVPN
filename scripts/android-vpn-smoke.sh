@@ -131,7 +131,7 @@ fi
 start_app
 # Compose may expose its first semantics tree before localized strings are ready.
 # Poll both supported labels instead of deciding the locale from one early snapshot.
-for _ in $(seq 1 20); do
+for _ in $(seq 1 60); do
   if has_ui_label "Tap to connect"; then
     connect_label="Tap to connect"
     connected_label="Connected"
@@ -146,7 +146,7 @@ for _ in $(seq 1 20); do
   fi
   sleep 1
 done
-: "${connect_label:?VPN_SMOKE_FAIL: connection action label was not exposed}"
+[[ -n "${connect_label:-}" ]] || fail "connection action label was not exposed"
 
 expected_engine="${EXPECT_ENGINE:-XRAY}"
 settings_xml="$("$ADB" exec-out run-as "$PACKAGE" cat shared_prefs/vpn_settings.xml 2>/dev/null || true)"
