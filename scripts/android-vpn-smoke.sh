@@ -59,6 +59,20 @@ wait_for_ui_label() {
   fail "UI did not reach label: $expected"
 }
 
+dismiss_quickstep_anr() {
+  # The API 34 hosted emulator can surface this launcher-only ANR over our app.
+  # Do not dismiss any other system/application error: it would hide a product failure.
+  if ! has_ui_label "Quickstep isn't responding"; then
+    return 1
+  fi
+  click_ui_label "Wait"
+  "$ADB" shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
+  "$ADB" shell wm dismiss-keyguard >/dev/null 2>&1 || true
+  "$ADB" shell am start -W -n "$PACKAGE/.MainActivity" >/dev/null || true
+  sleep 2
+  return 0
+}
+
 start_app() {
   "$ADB" shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
   "$ADB" shell wm dismiss-keyguard >/dev/null 2>&1 || true
@@ -132,6 +146,9 @@ start_app
 # Compose may expose its first semantics tree before localized strings are ready.
 # Poll both supported labels instead of deciding the locale from one early snapshot.
 for _ in $(seq 1 60); do
+  # Recover only the explicitly observed launcher ANR, then keep the real
+  # connect/disconnect, tunnel, engine, and cleanup assertions unchanged.
+  dismiss_quickstep_anr || true
   if has_ui_label "Tap to connect"; then
     connect_label="Tap to connect"
     connected_label="Connected"
