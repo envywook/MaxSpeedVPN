@@ -261,6 +261,10 @@ internal fun HomeDashboard(
             )
             speedScope.launch {
                 runCatching { NetworkSpeedTester(proxy = socksProxy).run { value -> speedScope.launch { speedSnapshot = value } } }
+                    .onSuccess {
+                        delay(120_000)
+                        speedSnapshot = SpeedTestSnapshot()
+                    }
                     .onFailure { speedError = it.message ?: it.javaClass.simpleName; speedSnapshot = SpeedTestSnapshot() }
             }
         }
@@ -354,7 +358,7 @@ private fun SessionDetails(
     val layout = sessionDetailsLayout(
         total = formatBytes(total),
         duration = formatSessionDuration(now - state.startedAtElapsedRealtimeMillis),
-        ping = latency?.latencyMillis?.let { "$it ms" } ?: "—",
+        ping = latency?.latencyMillis?.let { "${it}мс" } ?: "—",
         engine = engineLabel(state.engine),
         protocol = protocol.uppercase(Locale.ROOT),
         endpoint = endpoint,
@@ -617,7 +621,7 @@ private fun ServerListCard(
                 }
                 if (server.id in latencyTestingIds) CircularProgressIndicator(Modifier.size(18.dp), color = Mint, strokeWidth = 2.dp)
                 else latencyResults[server.id]?.let { result ->
-                    Text(result.latencyMillis?.let { "$it ms" } ?: "!", color = if (result.latencyMillis != null) Mint else TextMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    Text(result.latencyMillis?.let { "${it}мс" } ?: "!", color = if (result.latencyMillis != null) Mint else TextMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                 }
                 Spacer(Modifier.width(8.dp))
                 if (locked) Text("♙", color = Mint, fontSize = 18.sp)
@@ -686,14 +690,11 @@ private fun serverFlag(server: ServerProfile): String = serverFlagFromName(serve
 
 private val countryFlagRegex = Regex("[\\x{1F1E6}-\\x{1F1FF}]{2}")
 
-/**
- * The initial flag is the endpoint badge. The remaining flags/arrow chain stays in the name as
- * route context, e.g. 🇺🇸🇷🇺➙🇦🇹➙США becomes badge 🇺🇸 plus route 🇷🇺 ➙ 🇦🇹 ➙ США.
- */
+/** The initial flag is the endpoint badge; route arrows and intermediate flags are metadata. */
 internal fun serverDisplayName(name: String): String {
     val withoutEndpoint = countryFlagRegex.replaceFirst(name.trim(), "")
-    return withoutEndpoint
-        .replace("➙", " ➙ ")
+    return countryFlagRegex.replace(withoutEndpoint, "")
+        .replace(Regex("[➙→>]"), "")
         .replace(Regex("\\s+"), " ")
         .trim()
 }

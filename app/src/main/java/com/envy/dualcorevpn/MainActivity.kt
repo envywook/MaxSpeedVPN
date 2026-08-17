@@ -292,6 +292,7 @@ class MainActivity : ComponentActivity() {
         updateRepository = UpdateRepository(applicationContext)
         updateStatus = getString(R.string.update_version, BuildConfig.VERSION_NAME)
         vpnSettings = settingsRepository.load()
+        SubscriptionRefreshWorker.schedule(this)
         AppLog.initialize(java.io.File(filesDir, "logs"))
         AppLog.info("UI", "Application opened")
         handleSubscriptionIntent(intent)
@@ -798,6 +799,7 @@ private fun MaxSpeedVpnApp(
                     subscriptions = subscriptions,
                     loading = loading,
                     onAdd = onAddSubscription,
+                    onPasteAndAdd = { value -> onAddSubscription("", value) },
                     onImportProfileFile = onImportProfileFile,
                     onScanQr = onScanQr,
                     onUpdate = onUpdateSubscription,
@@ -965,7 +967,7 @@ private fun ServersScreen(
                             Text(if (active) "ВЫБРАН" else server.protocol.uppercase(), color = if (active) Accent else Muted, fontSize = 10.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
                             if (latency != null) {
                                 Text(
-                                    latency.latencyMillis?.let { "$it мс" } ?: "НЕДОСТУПЕН",
+                                    latency.latencyMillis?.let { "${it}мс" } ?: "НЕДОСТУПЕН",
                                     color = if (latency.latencyMillis != null) Success else Danger,
                                     fontSize = 11.sp,
                                 )
@@ -982,15 +984,28 @@ private fun ServersScreen(
 private fun SubscriptionsScreen(
     subscriptions: List<Subscription>, loading: Boolean,
     onAdd: (String, String) -> Unit,
+    onPasteAndAdd: (String) -> Unit,
     onImportProfileFile: () -> Unit,
     onScanQr: () -> Unit,
     onUpdate: (Subscription) -> Unit,
     onRemove: (Subscription) -> Unit,
 ) {
     var showAdd by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    fun pasteSubscription() {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val raw = clipboard.primaryClip
+            ?.takeIf { it.itemCount > 0 }
+            ?.getItemAt(0)
+            ?.coerceToText(context)
+            ?.toString()
+            ?.trim()
+            .orEmpty()
+        if (runCatching { ImportPayloadClassifier.classify(raw) }.isSuccess) onPasteAndAdd(raw)
+    }
     Column(Modifier.fillMaxSize()) {
         DashboardHeader(onAdd = { showAdd = true }, addEnabled = !loading)
-        Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
+        Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 20.dp)) {
             if (subscriptions.isEmpty()) EmptyState(
             stringResource(R.string.subscriptions_empty_title),
             stringResource(R.string.subscriptions_empty_text),
@@ -1029,6 +1044,21 @@ private fun SubscriptionsScreen(
                 }
             }
         }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OutlinedButton(onClick = ::pasteSubscription, enabled = !loading, modifier = Modifier.height(48.dp)) {
+                Text("▣")
+            }
+            Button(onClick = { showAdd = true }, enabled = !loading, modifier = Modifier.height(48.dp), shape = RoundedCornerShape(14.dp)) {
+                Text("+ ${stringResource(R.string.subscriptions_add)}")
+            }
+            OutlinedButton(onClick = onScanQr, enabled = !loading, modifier = Modifier.height(48.dp)) {
+                Text("▦")
+            }
         }
     }
     if (showAdd) AddSubscriptionDialog(
@@ -1299,7 +1329,6 @@ private fun SettingsNavigationCard(
                 Text(description, color = Muted, fontSize = 13.sp, lineHeight = 17.sp)
             }
             Text(value, color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 12.dp))
-            Text("  ›", color = Muted, fontSize = 22.sp)
         }
     }
 }

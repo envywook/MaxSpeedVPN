@@ -29,13 +29,13 @@ class ServerFlagResolverTest {
         val name = "🇺🇸🇷🇺➙🇦🇹➙США"
 
         assertEquals("🇺🇸", serverFlagFromName(name))
-        assertEquals("🇷🇺 ➙ 🇦🇹 ➙ США", serverDisplayName(name))
+        assertEquals("США", serverDisplayName(name))
     }
 
     @Test
     fun `keeps cascade route after a first destination flag`() {
         assertEquals("🇫🇮", serverFlagFromName("🇫🇮🇷🇺➙Финляндия TLS"))
-        assertEquals("🇷🇺 ➙ Финляндия TLS", serverDisplayName("🇫🇮🇷🇺➙Финляндия TLS"))
+        assertEquals("Финляндия TLS", serverDisplayName("🇫🇮🇷🇺➙Финляндия TLS"))
     }
 
     @Test

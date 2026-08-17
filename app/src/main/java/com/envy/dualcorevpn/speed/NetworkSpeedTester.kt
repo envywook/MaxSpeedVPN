@@ -16,7 +16,16 @@ data class SpeedTestSnapshot(
     val megabitsPerSecond: Double = 0.0,
     val downloadMbps: Double? = null,
     val uploadMbps: Double? = null,
-)
+) {
+    companion object {
+        fun complete(downloadMbps: Double, uploadMbps: Double): SpeedTestSnapshot = SpeedTestSnapshot(
+            phase = SpeedTestPhase.COMPLETE,
+            megabitsPerSecond = (downloadMbps + uploadMbps) / 2.0,
+            downloadMbps = downloadMbps,
+            uploadMbps = uploadMbps,
+        )
+    }
+}
 
 class NetworkSpeedTester(
     private val baseUrl: String = "https://speed.cloudflare.com",
@@ -42,7 +51,7 @@ class NetworkSpeedTester(
             snapshot = snapshot.copy(phase = SpeedTestPhase.UPLOAD, megabitsPerSecond = mbps)
             onProgress(snapshot)
         }
-        snapshot.copy(phase = SpeedTestPhase.COMPLETE, megabitsPerSecond = upload, uploadMbps = upload).also(onProgress)
+        SpeedTestSnapshot.complete(download, upload).also(onProgress)
         }
     }
 

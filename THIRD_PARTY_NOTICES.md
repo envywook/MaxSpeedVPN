@@ -1,6 +1,6 @@
 # Third-party notices
 
-MaxSpeedVPN uses or prepares the following third-party components. Their licenses apply independently of MaxSpeedVPN's GPL-3.0 license.
+MaxSpeedVPN source code is licensed under GPL-3.0 unless a file states otherwise. The components below retain their own licenses; those terms apply independently. This file is a project notice, not a complete substitute for the license texts and corresponding-source obligations that may apply when distributing a binary.
 
 ## AndroidLibXrayLite
 
