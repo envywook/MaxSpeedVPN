@@ -133,10 +133,12 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules || true
           sudo udevadm trigger --name-match=kvm || true
-          test -r /dev/kvm -a -w /dev/kvm || {
-            echo "KVM is unavailable; refusing software-emulated smoke run" >&2
-            exit 1
-          }
+          if test -r /dev/kvm -a -w /dev/kvm; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "KVM is unavailable; Android emulator will use software acceleration"
+          fi
 
       - name: Run API 34 VPN smoke
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
@@ -145,7 +147,7 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
-          disable-linux-hw-accel: false
+          disable-linux-hw-accel: ${{ steps.kvm.outputs.available != 'true' }}
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           script: |
             apk=app/build/outputs/apk/debug/app-x86_64-debug.apk
