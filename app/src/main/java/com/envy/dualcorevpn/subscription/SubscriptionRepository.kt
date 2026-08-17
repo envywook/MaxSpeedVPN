@@ -36,6 +36,20 @@ data class ServerProfile(
 private fun JSONObject.optNullableLong(key: String): Long? =
     if (has(key) && !isNull(key)) optLong(key) else null
 
+internal fun subscriptionRequestHeaders(
+    protocol: String,
+    identity: SubscriptionDeviceIdentity.Headers,
+): Map<String, String> = if (protocol.equals("http", ignoreCase = true) || protocol.equals("https", ignoreCase = true)) {
+    mapOf(
+        "X-Hwid" to identity.hwid,
+        "X-Device-Os" to identity.deviceOs,
+        "X-Ver-Os" to identity.osVersion,
+        "X-Device-Model" to identity.deviceModel,
+    )
+} else {
+    emptyMap()
+}
+
 class SubscriptionRepository(context: Context) {
     private val preferences = context.getSharedPreferences("subscriptions", Context.MODE_PRIVATE)
     private val deviceIdentity = SubscriptionDeviceIdentity(context.applicationContext)
@@ -174,13 +188,8 @@ class SubscriptionRepository(context: Context) {
             connection.readTimeout = 20_000
             connection.instanceFollowRedirects = false
             connection.setRequestProperty("User-Agent", "MaxSpeedVPN/${BuildConfig.VERSION_NAME} Android")
-            if (currentUrl.protocol.equals("https", ignoreCase = true)) {
-                deviceIdentity.headers(currentUrl.host).let { headers ->
-                    connection.setRequestProperty("X-Hwid", headers.hwid)
-                    connection.setRequestProperty("X-Device-Os", headers.deviceOs)
-                    connection.setRequestProperty("X-Ver-Os", headers.osVersion)
-                    connection.setRequestProperty("X-Device-Model", headers.deviceModel)
-                }
+            subscriptionRequestHeaders(currentUrl.protocol, deviceIdentity.headers(currentUrl.host)).forEach {
+                (name, value) -> connection.setRequestProperty(name, value)
             }
             try {
                 val responseCode = connection.responseCode
