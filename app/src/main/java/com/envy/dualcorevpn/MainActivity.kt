@@ -588,7 +588,7 @@ class MainActivity : ComponentActivity() {
     private fun saveVpnSettings(settings: VpnSettings) {
         val shouldRestart = hasActiveVpnSession(VpnSessionStore.state.value)
         settingsRepository.save(settings)
-        SubscriptionRefreshWorker.schedule(this, settings.subscriptionRefreshHours)
+        SubscriptionRefreshWorker.schedule(this)
         vpnSettings = settings
         if (shouldRestart) {
             val selected = repository.servers().firstOrNull { it.id == repository.selectedServerId() }

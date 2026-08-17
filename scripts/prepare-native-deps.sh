@@ -2,8 +2,8 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK="$ROOT/.native-build"
-XRAY_TAG="v26.7.19"
-XRAY_SHA256="0242df3843d59bb9aa68ddd52cb2ca443871a24b1f2bee4d5a346e74d5e4ee5d"
+XRAY_TAG="v26.7.31"
+XRAY_SHA256="a6b51b525b72a114c10e34288392439b1897c9ff7ce2f8afd7ffdce9d91e93b3"
 V2RAYNG_TAG="2.2.6"
 SING_BOX_VERSION="1.13.14-extended-2.5.2-lust.1"
 SING_BOX_TAG="sing-box-lust-1.13.14-ext2.5.2.1"

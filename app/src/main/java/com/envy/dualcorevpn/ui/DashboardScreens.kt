@@ -107,6 +107,8 @@ import com.envy.dualcorevpn.core.VpnTrafficSnapshot
 import com.envy.dualcorevpn.core.VpnTrafficStore
 import com.envy.dualcorevpn.subscription.ServerProfile
 import com.envy.dualcorevpn.subscription.Subscription
+import java.net.InetSocketAddress
+import java.net.Proxy
 import java.net.URI
 import java.util.Locale
 import kotlin.math.cos
@@ -250,9 +252,17 @@ internal fun HomeDashboard(
     val startSpeedTest = {
         speedConfirm = false
         speedError = null
-        speedScope.launch {
-            runCatching { NetworkSpeedTester().run { value -> speedScope.launch { speedSnapshot = value } } }
-                .onFailure { speedError = it.message ?: it.javaClass.simpleName; speedSnapshot = SpeedTestSnapshot() }
+        if (state !is VpnSessionState.Connected) {
+            speedError = "Сначала подключите VPN"
+        } else {
+            val socksProxy = Proxy(
+                Proxy.Type.SOCKS,
+                InetSocketAddress("127.0.0.1", 10808),
+            )
+            speedScope.launch {
+                runCatching { NetworkSpeedTester(proxy = socksProxy).run { value -> speedScope.launch { speedSnapshot = value } } }
+                    .onFailure { speedError = it.message ?: it.javaClass.simpleName; speedSnapshot = SpeedTestSnapshot() }
+            }
         }
         Unit
     }
