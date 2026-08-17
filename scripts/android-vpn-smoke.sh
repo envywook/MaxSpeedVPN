@@ -129,16 +129,24 @@ fi
 "$ADB" logcat -c
 "$ADB" shell am force-stop "$PACKAGE"
 start_app
-if has_ui_label "Tap to connect"; then
-  connect_label="Tap to connect"
-  connected_label="Connected"
-  disconnect_label="Tap to disconnect"
-else
-  connect_label="Нажмите, чтобы подключиться"
-  connected_label="Подключено"
-  disconnect_label="Нажмите, чтобы отключиться"
-  wait_for_ui_label "$connect_label"
-fi
+# Compose may expose its first semantics tree before localized strings are ready.
+# Poll both supported labels instead of deciding the locale from one early snapshot.
+for _ in $(seq 1 20); do
+  if has_ui_label "Tap to connect"; then
+    connect_label="Tap to connect"
+    connected_label="Connected"
+    disconnect_label="Tap to disconnect"
+    break
+  fi
+  if has_ui_label "Нажмите, чтобы подключиться"; then
+    connect_label="Нажмите, чтобы подключиться"
+    connected_label="Подключено"
+    disconnect_label="Нажмите, чтобы отключиться"
+    break
+  fi
+  sleep 1
+done
+: "${connect_label:?VPN_SMOKE_FAIL: connection action label was not exposed}"
 
 expected_engine="${EXPECT_ENGINE:-XRAY}"
 settings_xml="$("$ADB" exec-out run-as "$PACKAGE" cat shared_prefs/vpn_settings.xml 2>/dev/null || true)"
