@@ -1,3 +1,19 @@
+# MaxSpeedVPN v0.1.28-alpha
+
+## Обновление и идентификатор
+
+- встроенное обновление распознаёт текущие CI-имена release APK вида `MaxSpeedVPN-<tag>-app-<abi>-release.apk.apk`, поэтому версия `v0.1.27-alpha` теперь доступна для установки из приложения;
+- Android namespace и applicationId приведены к `com.envy.maxspeedvpn`; исходники и тесты перемещены в новый package без старого имени.
+
+## Проверка
+
+- добавлен регрессионный unit test для фактического имени arm64-v8a APK из `v0.1.27-alpha`;
+- локально пройдены unit tests и debug-сборка; tag workflow повторяет release-сборку, проверку подписей и API 34 smoke для Xray и sing-box.
+
+> Alpha-сборка использует постоянную release-подпись MaxSpeedVPN.
+
+---
+
 # MaxSpeedVPN v0.1.27-alpha
 
 ## Подписки и имена серверов

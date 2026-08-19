@@ -4,7 +4,7 @@ set -euo pipefail
 ADB="${ADB:-adb}"
 ENGINE="${1:?usage: seed-android-smoke.sh XRAY|SING_BOX [apk]}"
 APK="${2:-app/build/outputs/apk/debug/app-x86_64-debug.apk}"
-PACKAGE="com.envy.dualcorevpn"
+PACKAGE="com.envy.maxspeedvpn"
 [[ "$ENGINE" == "XRAY" || "$ENGINE" == "SING_BOX" ]] || { echo "unsupported engine: $ENGINE" >&2; exit 2; }
 [[ -f "$APK" ]] || { echo "APK not found: $APK" >&2; exit 2; }
 

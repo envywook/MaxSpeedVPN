@@ -1,0 +1,173 @@
+package com.envy.maxspeedvpn.core
+
+import com.envy.maxspeedvpn.routing.RoutingMode
+import com.envy.maxspeedvpn.routing.RoutingPolicy
+import org.json.JSONArray
+import org.json.JSONObject
+
+object SingBoxConfigConverter {
+    const val SOCKS_PORT = 10808
+
+    fun convert(sourceConfig: String, policy: RoutingPolicy = RoutingPolicy()): String {
+        val root = JSONObject(sourceConfig)
+        val outbound = if (root.optString("maxspeedvpn_format") == "sing-box" || root.optString("lust_format") == "sing-box") {
+            root.getJSONObject("outbound").also { native ->
+                require(native.optString("type").isNotBlank()) { "Native sing-box outbound type is required" }
+                native.put("tag", "proxy")
+            }
+        } else {
+            val routing = root.optJSONObject("routing")
+            require(routing == null || routing.length() == 0) {
+                "Sing-box conversion does not support custom Xray routing rules"
+            }
+            val outbounds = root.optJSONArray("outbounds") ?: error("At least one outbound is required")
+            val candidates = (0 until outbounds.length()).map(outbounds::getJSONObject)
+            val proxyCandidates = candidates.filterNot { it.optString("protocol") in setOf("freedom", "blackhole", "dns") }
+            require(proxyCandidates.size <= 1) { "Sing-box conversion supports exactly one proxy outbound" }
+            val source = candidates.firstOrNull { it.optString("tag") == "proxy" }
+                ?: candidates.firstOrNull()
+                ?: error("At least one outbound is required")
+            convertOutbound(source)
+        }
+        return buildConfig(outbound, policy)
+    }
+
+    private fun buildConfig(outbound: JSONObject, policy: RoutingPolicy): String = JSONObject().apply {
+            put("log", JSONObject().put("level", "fatal").put("timestamp", true))
+            put("inbounds", JSONArray().put(JSONObject().apply {
+                put("type", "socks")
+                put("tag", "socks-in")
+                put("listen", "127.0.0.1")
+                put("listen_port", SOCKS_PORT)
+            }))
+            put("outbounds", JSONArray().put(outbound).apply {
+                if (policy.mode != RoutingMode.ALL && outbound.optString("tag") != "direct") {
+                    put(JSONObject().put("type", "direct").put("tag", "direct"))
+                }
+            })
+            put("route", buildRoute(policy))
+        }.toString()
+
+    private fun buildRoute(policy: RoutingPolicy): JSONObject = JSONObject().put("final", "proxy").apply {
+        if (policy.mode == RoutingMode.ALL) return@apply
+        put("rules", JSONArray().put(JSONObject().apply {
+            put("action", "route")
+            put("outbound", "direct")
+            if (policy.mode == RoutingMode.BYPASS_LAN) put("ip_is_private", true)
+            if (policy.domains.isNotEmpty()) put("domain_suffix", JSONArray(policy.domains))
+            if (policy.ipCidrs.isNotEmpty()) put("ip_cidr", JSONArray(policy.ipCidrs))
+        }))
+    }
+
+    private fun convertOutbound(source: JSONObject): JSONObject {
+        val protocol = source.getString("protocol")
+        if (protocol == "freedom") return JSONObject().put("type", "direct").put("tag", "proxy")
+        val settings = source.optJSONObject("settings") ?: JSONObject()
+        val endpoint = when (protocol) {
+            "vless", "vmess" -> settings.getJSONArray("vnext").getJSONObject(0)
+            "trojan", "shadowsocks" -> settings.getJSONArray("servers").getJSONObject(0)
+            else -> error("Sing-box не поддерживает Xray outbound $protocol")
+        }
+        val outbound = JSONObject().apply {
+            put("type", protocol)
+            put("tag", "proxy")
+            put("server", endpoint.getString("address"))
+            put("server_port", endpoint.getInt("port"))
+        }
+        when (protocol) {
+            "vless" -> endpoint.getJSONArray("users").getJSONObject(0).also { user ->
+                outbound.put("uuid", user.getString("id"))
+                user.optString("flow").takeIf(String::isNotBlank)?.let { outbound.put("flow", it) }
+            }
+            "vmess" -> endpoint.getJSONArray("users").getJSONObject(0).also { user ->
+                outbound.put("uuid", user.getString("id"))
+                outbound.put("security", user.optString("security", "auto"))
+                outbound.put("alter_id", user.optInt("alterId", 0))
+            }
+            "trojan" -> outbound.put("password", endpoint.getString("password"))
+            "shadowsocks" -> {
+                outbound.put("method", endpoint.getString("method"))
+                outbound.put("password", endpoint.getString("password"))
+            }
+        }
+        applyStream(source.optJSONObject("streamSettings"), outbound)
+        return outbound
+    }
+
+    private fun JSONObject.requireOnlySupported(allowed: Set<String>, label: String) {
+        val unsupported = keys().asSequence().filterNot(allowed::contains).filter { key ->
+            when (val value = opt(key)) {
+                null, JSONObject.NULL, false, "" -> false
+                is JSONArray -> value.length() > 0
+                is JSONObject -> value.length() > 0
+                is Number -> value.toDouble() != 0.0
+                else -> true
+            }
+        }.toList()
+        require(unsupported.isEmpty()) {
+            "Sing-box conversion does not support $label fields: ${unsupported.joinToString()}"
+        }
+    }
+
+    private fun applyStream(stream: JSONObject?, outbound: JSONObject) {
+        if (stream == null) return
+        val security = stream.optString("security", "none")
+        require(security in setOf("", "none", "tls", "reality")) {
+            "Sing-box security $security пока не поддерживается"
+        }
+        if (security == "tls" || security == "reality") {
+            val source = if (security == "reality") stream.optJSONObject("realitySettings") else stream.optJSONObject("tlsSettings")
+            source?.requireOnlySupported(
+                if (security == "reality") setOf("serverName", "fingerprint", "publicKey", "shortId")
+                else setOf("serverName", "fingerprint", "allowInsecure", "alpn"),
+                "$security settings",
+            )
+            outbound.put("tls", JSONObject().apply {
+                put("enabled", true)
+                source?.optString("serverName")?.takeIf(String::isNotBlank)?.let { put("server_name", it) }
+                if (source?.has("allowInsecure") == true) put("insecure", source.optBoolean("allowInsecure"))
+                source?.optJSONArray("alpn")?.let { put("alpn", it) }
+                source?.optString("fingerprint")?.takeIf(String::isNotBlank)?.let {
+                    put("utls", JSONObject().put("enabled", true).put("fingerprint", it))
+                }
+                if (security == "reality") put("reality", JSONObject().apply {
+                    put("enabled", true)
+                    source?.optString("publicKey")?.takeIf(String::isNotBlank)?.let { put("public_key", it) }
+                    source?.optString("shortId")?.takeIf(String::isNotBlank)?.let { put("short_id", it) }
+                })
+            })
+        }
+        when (stream.optString("network", "tcp")) {
+            "ws" -> {
+                val ws = requireNotNull(stream.optJSONObject("wsSettings")) {
+                    "WebSocket transport requires wsSettings"
+                }
+                outbound.put("transport", JSONObject().apply {
+                    put("type", "ws")
+                    ws.optString("path").takeIf(String::isNotBlank)?.let { put("path", it) }
+                    ws.optJSONObject("headers")?.let { put("headers", it) }
+                })
+            }
+            "grpc" -> {
+                val grpc = requireNotNull(stream.optJSONObject("grpcSettings")) {
+                    "gRPC transport requires grpcSettings"
+                }
+                outbound.put("transport", JSONObject().put("type", "grpc")
+                    .put("service_name", grpc.optString("serviceName")))
+            }
+            "xhttp" -> {
+                val xhttp = stream.optJSONObject("xhttpSettings") ?: JSONObject()
+                xhttp.requireOnlySupported(setOf("host", "path", "mode", "xPaddingBytes"), "XHTTP settings for sing-box")
+                outbound.put("transport", JSONObject().apply {
+                    put("type", "xhttp")
+                    put("mode", xhttp.optString("mode", "auto"))
+                    put("x_padding_bytes", xhttp.optString("xPaddingBytes", "100-1000"))
+                    xhttp.optString("host").takeIf(String::isNotBlank)?.let { put("host", it) }
+                    xhttp.optString("path").takeIf(String::isNotBlank)?.let { put("path", it) }
+                })
+            }
+            "tcp", "raw", "" -> Unit
+            else -> error("Sing-box transport ${stream.optString("network")} пока не поддерживается")
+        }
+    }
+}

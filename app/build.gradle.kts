@@ -13,15 +13,15 @@ val maxSpeedTelegramUrl = providers.environmentVariable("MAXSPEED_TELEGRAM_URL")
 val maxSpeedSubscriptionHosts = providers.environmentVariable("MAXSPEED_SUBSCRIPTION_HOSTS").orElse("")
 
 android {
-    namespace = "com.envy.dualcorevpn"
+    namespace = "com.envy.maxspeedvpn"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.envy.dualcorevpn"
+        applicationId = "com.envy.maxspeedvpn"
         minSdk = 26
         targetSdk = 34
-        versionCode = 28
-        versionName = "0.1.27-alpha"
+        versionCode = 29
+        versionName = "0.1.28-alpha"
         buildConfigField("String", "RELEASE_CERT_SHA256", "\"5c9fb76e8a42eb4fecba7206fa20f35f54c78585d416b233ea77fcfbd343add6\"")
         buildConfigField("String", "MAXSPEED_TELEGRAM_URL", buildConfigString(maxSpeedTelegramUrl.get()))
         buildConfigField("String", "MAXSPEED_SUBSCRIPTION_HOSTS", buildConfigString(maxSpeedSubscriptionHosts.get()))

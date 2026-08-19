@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ADB="${ADB:-adb}"
-PACKAGE="com.envy.dualcorevpn"
+PACKAGE="com.envy.maxspeedvpn"
 APK="${1:-}"
 TMP_DIR="$(mktemp -d)"
 

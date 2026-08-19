@@ -1,0 +1,333 @@
+package com.envy.maxspeedvpn.vpn
+
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Intent
+import android.net.VpnService
+import android.os.Build
+import android.os.IBinder
+import android.os.SystemClock
+import androidx.core.app.NotificationCompat
+import com.envy.maxspeedvpn.MainActivity
+import com.envy.maxspeedvpn.R
+import com.envy.maxspeedvpn.core.EngineKind
+import com.envy.maxspeedvpn.core.EngineSelector
+import com.envy.maxspeedvpn.core.NativeSingBoxGateway
+import com.envy.maxspeedvpn.core.NativeXrayGateway
+import com.envy.maxspeedvpn.core.SingBoxEngine
+import com.envy.maxspeedvpn.core.TrafficCounterState
+import com.envy.maxspeedvpn.core.VpnEvent
+import com.envy.maxspeedvpn.core.VpnSessionCoordinator
+import com.envy.maxspeedvpn.core.VpnSessionServer
+import com.envy.maxspeedvpn.core.VpnSessionState
+import com.envy.maxspeedvpn.core.VpnSessionStore
+import com.envy.maxspeedvpn.core.VpnSessionStateMachine
+import com.envy.maxspeedvpn.core.VpnTrafficSnapshot
+import com.envy.maxspeedvpn.core.VpnTrafficStore
+import com.envy.maxspeedvpn.core.XrayConfigValidator
+import com.envy.maxspeedvpn.core.advanceTrafficCounters
+import com.envy.maxspeedvpn.core.bytesPerSecond
+import com.envy.maxspeedvpn.core.hevTunnelByteCounters
+import com.envy.maxspeedvpn.core.XrayEngine
+import com.envy.maxspeedvpn.core.XrayRuntime
+import com.envy.maxspeedvpn.logging.AppLog
+import com.envy.maxspeedvpn.settings.VpnSettingsRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import java.io.File
+
+class MaxSpeedVpnService : VpnService() {
+    private val stateMachine = VpnSessionStateMachine(onStateChanged = VpnSessionStore::update)
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var operation: Job? = null
+    private var trafficOperation: Job? = null
+    private var coordinator: VpnSessionCoordinator? = null
+    private var initializationFailure: Throwable? = null
+    private var serverName: String? = null
+    private var connectedAtEpochMillis: Long = 0L
+
+    override fun onCreate() {
+        super.onCreate()
+        AppLog.initialize(File(filesDir, "logs"))
+        AppLog.info("VPN", "Service created")
+        initializationFailure = runCatching { XrayRuntime.initialize(this) }
+            .exceptionOrNull()
+        createNotificationChannel()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_CONNECT -> {
+                serverName = intent.getStringExtra(EXTRA_SERVER_NAME)
+                connect(
+                    config = intent.getStringExtra(EXTRA_XRAY_CONFIG),
+                    server = intent.toSessionServer(),
+                )
+            }
+            ACTION_DISCONNECT -> disconnect()
+            else -> stopSelf()
+        }
+        return START_NOT_STICKY
+    }
+
+    private fun connect(config: String?, server: VpnSessionServer?) {
+        require(!config.isNullOrBlank()) { "Proxy configuration is required" }
+        val engineKind = EngineSelector.select(config, VpnSettingsRepository(this).load().engine)
+        val hadActiveSession = coordinator != null || operation?.isActive == true
+        operation?.cancel()
+        operation = serviceScope.launch {
+            try {
+                if (hadActiveSession) {
+                    stateMachine.dispatch(VpnEvent.DisconnectRequested)
+                    stopSession()
+                    stateMachine.dispatch(VpnEvent.Disconnected)
+                }
+                stateMachine.dispatch(VpnEvent.ConnectRequested(engineKind, server))
+                startForeground(NOTIFICATION_ID, buildNotification(getString(R.string.status_connecting)))
+                if (engineKind == EngineKind.XRAY) {
+                    initializationFailure?.let { throw IllegalStateException("Xray runtime initialization failed", it) }
+                }
+                AppLog.info("VPN", "Starting $engineKind + HEV session")
+                val session = createCoordinator(engineKind)
+                coordinator = session
+                session.start(config)
+                stateMachine.dispatch(VpnEvent.Connected(SystemClock.elapsedRealtime()))
+                connectedAtEpochMillis = System.currentTimeMillis()
+                startTrafficMonitoring()
+                AppLog.info("VPN", "Session connected")
+                updateNotification(getString(R.string.status_connected))
+            } catch (cancelled: CancellationException) {
+                AppLog.info("VPN", "Session start cancelled")
+                throw cancelled
+            } catch (error: Throwable) {
+                AppLog.error("VPN", "Session start failed: ${error.message ?: error.javaClass.simpleName}", error)
+                coordinator = null
+                stateMachine.dispatch(VpnEvent.Failed(error.message ?: "VPN start failed"))
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
+        }
+    }
+
+    private fun disconnect() {
+        if (coordinator == null && operation?.isActive != true) return
+        stateMachine.dispatch(VpnEvent.DisconnectRequested)
+        operation?.cancel()
+        operation = serviceScope.launch {
+            stopSession()
+            stateMachine.dispatch(VpnEvent.Disconnected)
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
+    }
+
+    private fun createCoordinator(engineKind: EngineKind): VpnSessionCoordinator {
+        val settings = VpnSettingsRepository(this).load()
+        val engine = when (engineKind) {
+            EngineKind.XRAY -> XrayEngine(
+                gateway = NativeXrayGateway(),
+                validator = XrayConfigValidator,
+                routingPolicy = settings.routingPolicy,
+            )
+            EngineKind.SING_BOX -> SingBoxEngine(
+                gateway = NativeSingBoxGateway(this) { exitCode ->
+                    handleRuntimeFailure(EngineKind.SING_BOX, "sing-box stopped unexpectedly (exit=$exitCode)")
+                },
+                routingPolicy = settings.routingPolicy,
+            )
+        }
+        val tunTransport = AndroidTunSessionTransport(
+            establishTun = {
+                Builder()
+                    .setSession(getString(R.string.app_name))
+                    .setMtu(settings.mtu)
+                    .addAddress("198.18.0.1", 30)
+                    .addRoute("0.0.0.0", 0)
+                    .addDnsServer(settings.dnsServer)
+                    .apply {
+                        if (settings.ipv6Enabled) {
+                            addAddress("fc00::1", 126)
+                            addRoute("::", 0)
+                        }
+                    }
+                    .applySplitTunnel(settings, packageName)
+                    .establish() ?: error("Android refused to establish the VPN interface")
+            },
+            writeConfig = { content ->
+                File(filesDir, "hev-socks5-tunnel.yaml").apply { writeText(content) }.absolutePath
+            },
+            hevConfig = HevConfig(mtu = settings.mtu, ipv6Enabled = settings.ipv6Enabled),
+            onFailure = { failure ->
+                AppLog.error("HEV", "Native tunnel failed", failure)
+                handleRuntimeFailure(engineKind, failure.message ?: "HEV tunnel failed")
+            },
+        )
+        return VpnSessionCoordinator(engine, tunTransport)
+    }
+
+    private fun handleRuntimeFailure(engine: EngineKind, message: String) {
+        serviceScope.launch {
+            val active = when (val state = stateMachine.state) {
+                is VpnSessionState.Connecting -> state.engine == engine
+                is VpnSessionState.Connected -> state.engine == engine
+                else -> false
+            }
+            if (!active) return@launch
+            AppLog.error("VPN", message)
+            stateMachine.dispatch(VpnEvent.Failed(message))
+            runCatching { stopSession() }
+                .onFailure { AppLog.error("VPN", "Failed to stop broken session", it) }
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
+    }
+
+    private suspend fun stopSession() {
+        try {
+            trafficOperation?.cancelAndJoin()
+            trafficOperation = null
+            VpnTrafficStore.reset()
+            coordinator?.stop()
+        } finally {
+            coordinator = null
+        }
+    }
+
+    private fun startTrafficMonitoring() {
+        trafficOperation?.cancel()
+        VpnTrafficStore.reset()
+        trafficOperation = serviceScope.launch {
+            val initial = readTunnelByteCounters() ?: return@launch
+            var counters = TrafficCounterState(previousRx = initial.rxBytes, previousTx = initial.txBytes)
+            var previousSampleAt = SystemClock.elapsedRealtime()
+            while (true) {
+                delay(1_000)
+                val current = readTunnelByteCounters() ?: continue
+                val sampledAt = SystemClock.elapsedRealtime()
+                val elapsedMillis = sampledAt - previousSampleAt
+                val previous = counters
+                counters = advanceTrafficCounters(counters, current.rxBytes, current.txBytes)
+                VpnTrafficStore.update(
+                    VpnTrafficSnapshot(
+                        downloadBytesPerSecond = bytesPerSecond(previous.previousRx, current.rxBytes, elapsedMillis),
+                        uploadBytesPerSecond = bytesPerSecond(previous.previousTx, current.txBytes, elapsedMillis),
+                        downloadedBytes = counters.totalRx,
+                        uploadedBytes = counters.totalTx,
+                    )
+                )
+                previousSampleAt = sampledAt
+            }
+        }
+    }
+
+    private fun readTunnelByteCounters() = runCatching { NativeTun2SocksGateway.stats() }
+        .mapCatching { hevTunnelByteCounters(it) }
+        .getOrNull()
+
+    override fun onDestroy() {
+        runBlocking(Dispatchers.IO) {
+            operation?.cancelAndJoin()
+            stopSession()
+        }
+        if (stateMachine.state !is VpnSessionState.Error) {
+            stateMachine.dispatch(VpnEvent.Terminated)
+        }
+        serviceScope.cancel()
+        super.onDestroy()
+    }
+
+    override fun onRevoke() {
+        AppLog.warn("VPN", "VPN permission revoked")
+        disconnect()
+        super.onRevoke()
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = super.onBind(intent)
+
+    private fun Intent.toSessionServer(): VpnSessionServer? {
+        val profileId = getStringExtra(EXTRA_SERVER_ID) ?: return null
+        val protocol = getStringExtra(EXTRA_SERVER_PROTOCOL) ?: return null
+        val address = getStringExtra(EXTRA_SERVER_ADDRESS) ?: return null
+        val port = getIntExtra(EXTRA_SERVER_PORT, -1).takeIf { it in 1..65_535 } ?: return null
+        return VpnSessionServer(profileId, protocol, address, port)
+    }
+
+    private fun buildNotification(status: String) = NotificationCompat.Builder(this, CHANNEL_ID)
+        .setSmallIcon(R.drawable.ic_stat_vpn)
+        .setContentTitle(getString(R.string.app_name))
+        .setContentText(serverName?.let { "$status · $it" } ?: status)
+        .setSubText(serverName)
+        .setUsesChronometer(connectedAtEpochMillis > 0L)
+        .setWhen(if (connectedAtEpochMillis > 0L) connectedAtEpochMillis else System.currentTimeMillis())
+        .setOngoing(true)
+        .setContentIntent(
+            PendingIntent.getActivity(
+                this,
+                0,
+                Intent(this, MainActivity::class.java),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+        )
+        .addAction(
+            0,
+            getString(R.string.change_server),
+            PendingIntent.getActivity(
+                this,
+                2,
+                Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+        )
+        .addAction(
+            0,
+            getString(R.string.disconnect),
+            PendingIntent.getService(
+                this,
+                1,
+                Intent(this, MaxSpeedVpnService::class.java).setAction(ACTION_DISCONNECT),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+        )
+        .build()
+
+    private fun updateNotification(status: String) {
+        getSystemService(NotificationManager::class.java).notify(
+            NOTIFICATION_ID,
+            buildNotification(status)
+        )
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            getSystemService(NotificationManager::class.java).createNotificationChannel(
+                NotificationChannel(
+                    CHANNEL_ID,
+                    getString(R.string.vpn_channel_name),
+                    NotificationManager.IMPORTANCE_LOW
+                )
+            )
+        }
+    }
+
+    companion object {
+        const val ACTION_CONNECT = "com.envy.maxspeedvpn.CONNECT"
+        const val ACTION_DISCONNECT = "com.envy.maxspeedvpn.DISCONNECT"
+        const val EXTRA_XRAY_CONFIG = "com.envy.maxspeedvpn.XRAY_CONFIG"
+        const val EXTRA_SERVER_NAME = "com.envy.maxspeedvpn.SERVER_NAME"
+        const val EXTRA_SERVER_ID = "com.envy.maxspeedvpn.SERVER_ID"
+        const val EXTRA_SERVER_PROTOCOL = "com.envy.maxspeedvpn.SERVER_PROTOCOL"
+        const val EXTRA_SERVER_ADDRESS = "com.envy.maxspeedvpn.SERVER_ADDRESS"
+        const val EXTRA_SERVER_PORT = "com.envy.maxspeedvpn.SERVER_PORT"
+        private const val CHANNEL_ID = "vpn_connection"
+        private const val NOTIFICATION_ID = 1001
+    }
+}

@@ -1,0 +1,82 @@
+package com.envy.maxspeedvpn.server
+
+import com.envy.maxspeedvpn.subscription.ServerProfile
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withTimeout
+
+fun interface HttpProbe {
+    suspend fun measure(url: String): Long
+}
+
+data class ServerLatencyResult(
+    val latencyMillis: Long?,
+    val error: String?,
+)
+
+class ServerLatencyTester(
+    private val probe: HttpProbe? = null,
+) {
+    suspend fun testOne(
+        server: ServerProfile,
+        timeoutMillis: Long = 3_000,
+    ): ServerLatencyResult {
+        require(timeoutMillis > 0) { "Timeout must be positive" }
+        return measure(server, timeoutMillis)
+    }
+
+    suspend fun test(
+        servers: List<ServerProfile>,
+        concurrency: Int = 10,
+        timeoutMillis: Long = 3_000,
+    ): Map<String, ServerLatencyResult> = coroutineScope {
+        require(concurrency in 1..16) { "Concurrency must be between 1 and 16" }
+        require(timeoutMillis > 0) { "Timeout must be positive" }
+        val semaphore = Semaphore(concurrency)
+        servers.map { server ->
+            async { server.id to semaphore.withPermit { measure(server, timeoutMillis) } }
+        }.awaitAll().toMap()
+    }
+
+    private suspend fun measure(server: ServerProfile, timeoutMillis: Long): ServerLatencyResult = try {
+        val latency = withTimeout(timeoutMillis) {
+            probe?.measure(probeUrl(server))
+                ?: measureHttpGet(probeUrl(server), timeoutMillis)
+        }
+        ServerLatencyResult(latency, null)
+    } catch (_: TimeoutCancellationException) {
+        ServerLatencyResult(null, "Timeout")
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Exception) {
+        ServerLatencyResult(null, error.message ?: error.javaClass.simpleName)
+    }
+
+    private fun probeUrl(server: ServerProfile): String = "https://${server.address}:${server.port}/"
+
+    private suspend fun measureHttpGet(url: String, timeoutMillis: Long): Long =
+        runInterruptible(Dispatchers.IO) {
+            val started = System.nanoTime()
+            (URL(url).openConnection() as HttpURLConnection).run {
+                requestMethod = "GET"
+                connectTimeout = timeoutMillis.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                readTimeout = connectTimeout
+                instanceFollowRedirects = false
+                try {
+                    responseCode
+                } finally {
+                    disconnect()
+                }
+            }
+            (System.nanoTime() - started) / 1_000_000
+        }
+}
