@@ -38,6 +38,18 @@ command -v readelf >/dev/null
 command -v strings >/dev/null
 command -v tar >/dev/null
 
+download_verified() {
+  local destination="$1" expected_sha256="$2" url="$3"
+  if [[ -f "$destination" ]] && echo "$expected_sha256  $destination" | sha256sum -c - >/dev/null 2>&1; then
+    echo "Using verified cached $(basename "$destination")"
+    return
+  fi
+  rm -f "$destination"
+  curl -fsSL --retry 3 -o "${destination}.tmp" "$url"
+  echo "$expected_sha256  ${destination}.tmp" | sha256sum -c -
+  mv "${destination}.tmp" "$destination"
+}
+
 download_release_asset() {
   local repository="$1" tag="$2" asset_name="$3" destination="$4"
   if [[ -z "${GITHUB_TOKEN:-}" ]]; then
@@ -59,13 +71,11 @@ download_release_asset() {
 }
 
 mkdir -p "$ROOT/app/libs" "$ROOT/app/src/main/jniLibs" "$WORK/v2rayng-apks"
-curl -fsSL --retry 3 -o "$ROOT/app/libs/libv2ray.aar" \
+download_verified "$ROOT/app/libs/libv2ray.aar" "$XRAY_SHA256" \
   "https://github.com/2dust/AndroidLibXrayLite/releases/download/$XRAY_TAG/libv2ray.aar"
-echo "$XRAY_SHA256  $ROOT/app/libs/libv2ray.aar" | sha256sum -c -
 for abi in "${ABIS[@]}"; do
   apk="$WORK/v2rayng-apks/${APK_NAME[$abi]}"
-  curl -fsSL --retry 3 -o "$apk" "${APK_URL[$abi]}"
-  echo "${APK_SHA256[$abi]}  $apk" | sha256sum -c -
+  download_verified "$apk" "${APK_SHA256[$abi]}" "${APK_URL[$abi]}"
   dest="$ROOT/app/src/main/jniLibs/$abi/libhev-socks5-tunnel.so"
   mkdir -p "$(dirname "$dest")"
   unzip -p "$apk" "lib/$abi/libhev-socks5-tunnel.so" > "$dest"
@@ -79,8 +89,13 @@ for abi in "${ABIS[@]}"; do
 done
 for arch in "${SING_ARCH[@]}"; do
   archive="$WORK/sing-box-$SING_BOX_VERSION-android-$arch.tar.gz"
-  download_release_asset "$SING_BOX_REPO" "$SING_BOX_TAG" \
-    "sing-box-$SING_BOX_VERSION-android-$arch.tar.gz" "$archive"
+  asset="sing-box-$SING_BOX_VERSION-android-$arch.tar.gz"
+  if [[ ! -f "$archive" ]] || ! echo "${SING_SHA256[$arch]}  $archive" | sha256sum -c - >/dev/null 2>&1; then
+    rm -f "$archive"
+    download_release_asset "$SING_BOX_REPO" "$SING_BOX_TAG" "$asset" "$archive"
+  else
+    echo "Using verified cached $asset"
+  fi
   echo "${SING_SHA256[$arch]}  $archive" | sha256sum -c -
   abi="${SING_ABI[$arch]}"
   dest="$ROOT/app/src/main/jniLibs/$abi/libsingbox.so"

@@ -38,6 +38,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
@@ -47,6 +48,12 @@ jobs:
 
       - name: Install Android SDK packages
         run: sdkmanager 'platforms;android-34' 'build-tools;34.0.0'
+
+      - name: Restore verified native dependency cache
+        uses: actions/cache@v4
+        with:
+          path: .native-build
+          key: native-deps-${{ runner.os }}-${{ hashFiles('scripts/prepare-native-deps.sh') }}
 
       - name: Prepare verified native dependencies
         run: ./scripts/prepare-native-deps.sh
@@ -113,6 +120,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
@@ -122,6 +130,12 @@ jobs:
 
       - name: Install Android SDK packages
         run: sdkmanager 'platforms;android-34' 'build-tools;34.0.0'
+
+      - name: Restore verified native dependency cache
+        uses: actions/cache@v4
+        with:
+          path: .native-build
+          key: native-deps-${{ runner.os }}-${{ hashFiles('scripts/prepare-native-deps.sh') }}
 
       - name: Prepare verified native dependencies
         run: ./scripts/prepare-native-deps.sh
@@ -172,12 +186,22 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
 
       - name: Install Android SDK packages
         run: sdkmanager 'platforms;android-34' 'build-tools;34.0.0'
+
+      - name: Restore verified native dependency cache
+        uses: actions/cache@v4
+        with:
+          path: .native-build
+          key: native-deps-${{ runner.os }}-${{ hashFiles('scripts/prepare-native-deps.sh') }}
 
       - name: Prepare verified native dependencies
         env:
