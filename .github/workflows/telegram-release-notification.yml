@@ -1,8 +1,15 @@
 name: Telegram Release Notification
 
 on:
-  release:
-    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published release tag to announce
+        required: true
+        type: string
+
+permissions:
+  contents: read
 
 jobs:
   telegram:
@@ -13,16 +20,24 @@ jobs:
         env:
           BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          RELEASE_NAME: ${{ github.event.release.name }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          RELEASE_URL: ${{ github.event.release.html_url }}
-          RELEASE_BODY: ${{ github.event.release.body }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: |
-          TEXT=$(printf '🚀 Новый релиз: %s\n\n🏷 Версия: %s\n\n%s\n\n🔗 %s' \
-            "$RELEASE_NAME" \
-            "$RELEASE_TAG" \
-            "$RELEASE_BODY" \
-            "$RELEASE_URL")
+          set -euo pipefail
+          release_json="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}")"
+          TEXT="$(RELEASE_JSON="$release_json" python3 - <<'PY'
+          import json
+          import os
+
+          release = json.loads(os.environ["RELEASE_JSON"])
+          print(
+              f"🚀 Новый релиз: {release['name']}\n\n"
+              f"🏷 Версия: {release['tag_name']}\n\n"
+              f"{release.get('body') or ''}\n\n"
+              f"🔗 {release['html_url']}"
+          )
+          PY
+          )"
 
           curl --fail-with-body -sS -X POST \
             "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \

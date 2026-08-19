@@ -255,3 +255,26 @@ jobs:
             --notes-file /tmp/current-release-notes.md \
             --prerelease \
             --verify-tag
+
+      - name: Announce release on Telegram
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          release_url="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}"
+          TEXT="$(python3 - "${RELEASE_TAG}" "${release_url}" /tmp/current-release-notes.md <<'PY'
+          from pathlib import Path
+          import sys
+
+          tag, release_url, notes_path = sys.argv[1:]
+          notes = Path(notes_path).read_text().strip()
+          print(f"🚀 Новый релиз: MaxSpeedVPN {tag}\n\n🏷 Версия: {tag}\n\n{notes}\n\n🔗 {release_url}")
+          PY
+          )"
+          curl --fail-with-body -sS -X POST \
+            "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${CHAT_ID}" \
+            --data-urlencode "text=${TEXT}" \
+            --data-urlencode "disable_web_page_preview=false"
