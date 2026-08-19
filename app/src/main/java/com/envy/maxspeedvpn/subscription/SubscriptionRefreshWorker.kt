@@ -16,6 +16,8 @@ import java.util.concurrent.TimeUnit
 
 internal fun subscriptionRefreshWorkPolicy(): ExistingPeriodicWorkPolicy = ExistingPeriodicWorkPolicy.KEEP
 
+internal fun subscriptionRefreshIntervalHours(): Long = 12L
+
 class SubscriptionRefreshWorker(
     appContext: Context,
     params: WorkerParameters,
@@ -72,7 +74,7 @@ class SubscriptionRefreshWorker(
 
         fun schedule(context: Context) {
             val manager = WorkManager.getInstance(context)
-            val request = PeriodicWorkRequestBuilder<SubscriptionRefreshWorker>(1, TimeUnit.HOURS)
+            val request = PeriodicWorkRequestBuilder<SubscriptionRefreshWorker>(subscriptionRefreshIntervalHours(), TimeUnit.HOURS)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .build()
             manager.enqueueUniquePeriodicWork(WORK_NAME, subscriptionRefreshWorkPolicy(), request)
