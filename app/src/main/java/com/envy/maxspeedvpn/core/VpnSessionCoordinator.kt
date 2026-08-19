@@ -30,8 +30,8 @@ class VpnSessionCoordinator(
     }
 
     private suspend fun startEngineFirst(config: String) {
-        engine.start(config, -1)
         try {
+            engine.start(config, -1)
             transport.start()
         } catch (failure: Throwable) {
             runCatching { engine.stop() }.onFailure(failure::addSuppressed)
