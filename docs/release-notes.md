@@ -1,3 +1,16 @@
+# MaxSpeedVPN v0.1.29-alpha
+
+## CI и публикация
+
+- Telegram-анонс выполняется непосредственно после успешной публикации GitHub pre-release в том же release job; это исключает подавление отдельного `release.published` workflow токеном GitHub Actions;
+- `v0.1.29-alpha` — проверочный pre-release для сквозной валидации публикации APK и поста в официальном Telegram-канале.
+
+## Проверка
+
+- перед тегом выполнены Android lint, JVM unit tests и debug-сборка; tag workflow повторяет release-сборку, проверку подписей и API 34 smoke для Xray и sing-box.
+
+---
+
 # MaxSpeedVPN v0.1.28-alpha
 
 ## Обновление и идентификатор
