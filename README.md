@@ -18,6 +18,8 @@
 <p align="center">
   <a href="https://github.com/envywook/MaxSpeedVPN/releases"><strong>Скачать APK</strong></a>
   ·
+  <a href="https://shieldcn.dev/"><strong>ShieldCN</strong></a>
+  ·
   <a href="#сборка"><strong>Собрать из исходников</strong></a>
   ·
   <a href="#статус-проекта"><strong>Статус проекта</strong></a>
@@ -127,6 +129,10 @@ Android traffic → TUN → HEV → SOCKS 127.0.0.1:10808 → Xray → сеть
 ## Скачать
 
 Готовые сборки и описание изменений публикуются на странице [GitHub Releases](https://github.com/envywook/MaxSpeedVPN/releases). Полная история — в [CHANGELOG.md](CHANGELOG.md).
+
+## Полезная ссылка
+
+[ShieldCN](https://shieldcn.dev/) — официальный ресурс проекта.
 
 Выбирайте файл по архитектуре устройства:
 
