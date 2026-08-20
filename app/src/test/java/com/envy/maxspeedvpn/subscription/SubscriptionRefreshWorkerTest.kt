@@ -11,7 +11,7 @@ class SubscriptionRefreshWorkerTest {
     }
 
     @Test
-    fun `automatic subscription refresh defaults to twelve hours`() {
-        assertEquals(12L, subscriptionRefreshIntervalHours())
+    fun `automatic subscription refresh defaults to one hour`() {
+        assertEquals(1L, subscriptionRefreshIntervalHours())
     }
 }

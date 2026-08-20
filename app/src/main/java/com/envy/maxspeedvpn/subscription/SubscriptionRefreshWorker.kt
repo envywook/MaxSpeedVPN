@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit
 
 internal fun subscriptionRefreshWorkPolicy(): ExistingPeriodicWorkPolicy = ExistingPeriodicWorkPolicy.KEEP
 
-internal fun subscriptionRefreshIntervalHours(): Long = 12L
+internal fun subscriptionRefreshIntervalHours(): Long = 1L
 
 class SubscriptionRefreshWorker(
     appContext: Context,
