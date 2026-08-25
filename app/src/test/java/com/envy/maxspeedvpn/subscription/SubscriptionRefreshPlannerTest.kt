@@ -63,4 +63,18 @@ class SubscriptionRefreshPlannerTest {
         )
         assertEquals(sameCountry.id, plan.selectedServerId)
     }
+
+    @Test
+    fun `stale refresh cannot recreate a subscription removed while fetching`() {
+        val plan = SubscriptionRefreshPlanner.planExisting(
+            subscriptions = emptyList(),
+            servers = emptyList(),
+            selectedServerId = null,
+            subscription = old,
+            report = SubscriptionParser.ParseReport(listOf(freshServer), 0, 0, 0),
+            updatedAt = 20L,
+        )
+
+        assertEquals(null, plan)
+    }
 }

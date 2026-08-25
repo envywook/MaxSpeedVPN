@@ -10,6 +10,7 @@ import java.net.URL
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
@@ -151,7 +152,7 @@ class SubscriptionRepository(context: Context) {
     suspend fun update(subscription: Subscription): SubscriptionUpdateResult = updateMutex.withLock {
         val fetched = fetch(subscription)
         synchronized(preferenceLock) {
-            val plan = SubscriptionRefreshPlanner.plan(
+            val plan = SubscriptionRefreshPlanner.planExisting(
                 subscriptions = subscriptions(),
                 servers = servers(),
                 selectedServerId = selectedServerId(),
@@ -161,7 +162,7 @@ class SubscriptionRepository(context: Context) {
                 ),
                 report = fetched.report,
                 updatedAt = System.currentTimeMillis(),
-            )
+            ) ?: throw CancellationException("Подписка была удалена во время обновления")
             persist(plan)
             plan.result
         }
@@ -359,7 +360,7 @@ object SubscriptionParser {
     private fun parseVmess(subscriptionId: String, encoded: String): ServerProfile {
         val json = JSONObject(decodeBase64(encoded))
         val address = json.getString("add")
-        val port = json.getString("port").toInt()
+        val port = requireValidPort(json.getString("port").toInt())
         val name = json.optString("ps").ifBlank { "$address:$port" }
         val user = JSONObject().apply {
             put("id", json.getString("id")); put("alterId", json.optInt("aid", 0)); put("security", json.optString("scy", "auto"))
@@ -384,7 +385,7 @@ object SubscriptionParser {
     private fun parseStandardUri(subscriptionId: String, source: String, protocol: String): ServerProfile {
         val uri = URI(source)
         val address = uri.host ?: error("В ссылке отсутствует адрес сервера")
-        val port = if (uri.port > 0) uri.port else 443
+        val port = explicitOrDefaultPort(source, uri, 443)
         val query = parseQuery(uri.rawQuery)
         val name = decode(uri.rawFragment ?: "$address:$port")
         val settings = when (protocol) {
@@ -400,7 +401,7 @@ object SubscriptionParser {
             }))
             }
             "trojan" -> {
-                val password = uri.userInfo?.takeIf(String::isNotBlank)
+                val password = uri.rawUserInfo?.takeIf(String::isNotBlank)
                     ?: error("В Trojan-ссылке отсутствует пароль")
                 JSONObject().put("servers", JSONArray().put(JSONObject().apply {
                     put("address", address); put("port", port); put("password", decode(password))
@@ -421,7 +422,7 @@ object SubscriptionParser {
     private fun parseHysteria2(subscriptionId: String, source: String): ServerProfile {
         val uri = URI(source)
         val address = uri.host ?: error("В Hysteria2-ссылке отсутствует адрес сервера")
-        val port = uri.port.takeIf { it > 0 } ?: 443
+        val port = explicitOrDefaultPort(source, uri, 443)
         val password = uri.rawUserInfo?.let(::decode)?.takeIf(String::isNotBlank)
             ?: error("В Hysteria2-ссылке отсутствует пароль")
         val query = parseQuery(uri.rawQuery)
@@ -442,7 +443,7 @@ object SubscriptionParser {
     private fun parseTuic(subscriptionId: String, source: String): ServerProfile {
         val uri = URI(source)
         val address = uri.host ?: error("В TUIC-ссылке отсутствует адрес сервера")
-        val port = uri.port.takeIf { it > 0 } ?: 443
+        val port = explicitOrDefaultPort(source, uri, 443)
         val credentials = uri.rawUserInfo?.let(::decode)?.split(':', limit = 2).orEmpty()
         require(credentials.size == 2 && credentials.all(String::isNotBlank)) {
             "TUIC-ссылка должна содержать UUID и пароль"
@@ -471,7 +472,7 @@ object SubscriptionParser {
     private fun parseNaive(subscriptionId: String, source: String): ServerProfile {
         val uri = URI(source)
         val address = uri.host ?: error("В Naive-ссылке отсутствует адрес сервера")
-        val port = uri.port.takeIf { it > 0 } ?: 443
+        val port = explicitOrDefaultPort(source, uri, 443)
         val credentials = uri.rawUserInfo?.split(':', limit = 2)?.map(::decodeUriComponent).orEmpty()
         require(credentials.size == 2 && credentials.all(String::isNotBlank)) {
             "Naive-ссылка должна содержать имя пользователя и пароль"
@@ -688,4 +689,18 @@ object SubscriptionParser {
     private fun decode(value: String): String = URLDecoder.decode(value, StandardCharsets.UTF_8.name())
 
     private fun decodeUriComponent(value: String): String = decode(value.replace("+", "%2B"))
+
+    private fun explicitOrDefaultPort(source: String, uri: URI, default: Int): Int {
+        val authority = source.substringAfter("://").substringBefore('/').substringBefore('?').substringBefore('#')
+        val hostPort = authority.substringAfterLast('@')
+        val hasExplicitPort = when {
+            hostPort.startsWith('[') -> hostPort.substringAfter(']', "").startsWith(':')
+            else -> hostPort.contains(':')
+        }
+        return if (hasExplicitPort) requireValidPort(uri.port) else default
+    }
+
+    private fun requireValidPort(port: Int): Int = port.also {
+        require(it in 1..65_535) { "Некорректный порт сервера" }
+    }
 }

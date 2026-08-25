@@ -77,7 +77,9 @@ object MaxSpeedVpnBackupCodec {
                 val id = requiredString(item, "id")
                 require(add(id)) { "Повторяющийся ID сервера" }
                 val subscriptionId = requiredString(item, "subscriptionId")
-                require(subscriptionId in subscriptionIds) { "Сервер ссылается на отсутствующую подписку" }
+                require(subscriptionId in subscriptionIds || subscriptionId.startsWith("local-")) {
+                    "Сервер ссылается на отсутствующую подписку"
+                }
                 requiredString(item, "name")
                 requiredString(item, "protocol")
                 requiredString(item, "address")

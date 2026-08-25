@@ -13,8 +13,10 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.envy.maxspeedvpn.R
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
 
-internal fun subscriptionRefreshWorkPolicy(): ExistingPeriodicWorkPolicy = ExistingPeriodicWorkPolicy.KEEP
+internal fun subscriptionRefreshWorkPolicy(intervalMigrationPending: Boolean): ExistingPeriodicWorkPolicy =
+    if (intervalMigrationPending) ExistingPeriodicWorkPolicy.UPDATE else ExistingPeriodicWorkPolicy.KEEP
 
 internal fun subscriptionRefreshIntervalHours(): Long = 1L
 
@@ -31,13 +33,16 @@ class SubscriptionRefreshWorker(
         subscriptions.forEach { subscription ->
             val before = repository.servers().filter { it.subscriptionId == subscription.id }
                 .associate { it.id to it.config }
-            runCatching { repository.update(subscription) }
-                .onSuccess {
-                    val after = repository.servers().filter { it.subscriptionId == subscription.id }
-                        .associate { it.id to it.config }
-                    if (before != after) changed++
-                }
-                .onFailure { errors += subscription.name }
+            try {
+                repository.update(subscription)
+                val after = repository.servers().filter { it.subscriptionId == subscription.id }
+                    .associate { it.id to it.config }
+                if (before != after) changed++
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Throwable) {
+                errors += subscription.name
+            }
         }
         if (changed > 0 || errors.isNotEmpty()) notifyResult(changed, errors)
         return if (errors.size == subscriptions.size) Result.retry() else Result.success()
@@ -74,10 +79,18 @@ class SubscriptionRefreshWorker(
 
         fun schedule(context: Context) {
             val manager = WorkManager.getInstance(context)
+            val migrationPreferences = context.getSharedPreferences(SCHEDULE_PREFERENCES, Context.MODE_PRIVATE)
+            val intervalMigrationPending = !migrationPreferences.getBoolean(KEY_HOURLY_MIGRATION_COMPLETE, false)
             val request = PeriodicWorkRequestBuilder<SubscriptionRefreshWorker>(subscriptionRefreshIntervalHours(), TimeUnit.HOURS)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .build()
-            manager.enqueueUniquePeriodicWork(WORK_NAME, subscriptionRefreshWorkPolicy(), request)
+            manager.enqueueUniquePeriodicWork(WORK_NAME, subscriptionRefreshWorkPolicy(intervalMigrationPending), request)
+            if (intervalMigrationPending) {
+                migrationPreferences.edit().putBoolean(KEY_HOURLY_MIGRATION_COMPLETE, true).apply()
+            }
         }
+
+        private const val SCHEDULE_PREFERENCES = "subscription-refresh-schedule"
+        private const val KEY_HOURLY_MIGRATION_COMPLETE = "hourly-migration-complete"
     }
 }

@@ -32,22 +32,25 @@ class UpdateRepository(private val context: Context) {
         temporary.delete()
         try {
             val connection = open(update.apk.downloadUrl)
-            connection.inputStream.use { input -> temporary.outputStream().buffered().use { output ->
-                val digest = MessageDigest.getInstance("SHA-256")
-                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                var total = 0L
-                while (true) {
-                    val count = input.read(buffer)
-                    if (count < 0) break
-                    total += count
-                    require(total <= MAX_APK) { "APK превышает допустимый размер" }
-                    digest.update(buffer, 0, count)
-                    output.write(buffer, 0, count)
-                }
-                require(total == update.apk.size) { "Размер загруженного APK не совпадает" }
-                require(MessageDigest.isEqual(digest.digest(), expected.hexBytes())) { "SHA-256 APK не совпадает" }
-            } }
-            connection.disconnect()
+            try {
+                connection.inputStream.use { input -> temporary.outputStream().buffered().use { output ->
+                    val digest = MessageDigest.getInstance("SHA-256")
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    var total = 0L
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        total += count
+                        require(total <= MAX_APK) { "APK превышает допустимый размер" }
+                        digest.update(buffer, 0, count)
+                        output.write(buffer, 0, count)
+                    }
+                    require(total == update.apk.size) { "Размер загруженного APK не совпадает" }
+                    require(MessageDigest.isEqual(digest.digest(), expected.hexBytes())) { "SHA-256 APK не совпадает" }
+                } }
+            } finally {
+                connection.disconnect()
+            }
             verifyApk(temporary, update.version)
             destination.delete()
             require(temporary.renameTo(destination)) { "Не удалось сохранить APK" }

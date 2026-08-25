@@ -42,7 +42,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import java.io.File
 
 class MaxSpeedVpnService : VpnService() {
@@ -119,14 +118,20 @@ class MaxSpeedVpnService : VpnService() {
     }
 
     private fun disconnect() {
-        if (coordinator == null && operation?.isActive != true) return
-        stateMachine.dispatch(VpnEvent.DisconnectRequested)
         operation?.cancel()
         operation = serviceScope.launch {
-            stopSession()
-            stateMachine.dispatch(VpnEvent.Disconnected)
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
+            val state = stateMachine.state
+            if (state is VpnSessionState.Disconnected || state is VpnSessionState.Disconnecting) return@launch
+            stateMachine.dispatch(VpnEvent.DisconnectRequested)
+            try {
+                stopSession()
+            } catch (failure: Throwable) {
+                AppLog.error("VPN", "Failed to stop session", failure)
+            } finally {
+                stateMachine.dispatch(VpnEvent.Disconnected)
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
         }
     }
 
@@ -234,9 +239,17 @@ class MaxSpeedVpnService : VpnService() {
         .getOrNull()
 
     override fun onDestroy() {
-        runBlocking(Dispatchers.IO) {
-            operation?.cancelAndJoin()
-            stopSession()
+        operation?.cancel()
+        trafficOperation?.cancel()
+        val activeCoordinator = coordinator
+        coordinator = null
+        trafficOperation = null
+        VpnTrafficStore.reset()
+        if (activeCoordinator != null) {
+            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+                runCatching { activeCoordinator.stop() }
+                    .onFailure { AppLog.error("VPN", "Failed to stop session during destruction", it) }
+            }
         }
         if (stateMachine.state !is VpnSessionState.Error) {
             stateMachine.dispatch(VpnEvent.Terminated)

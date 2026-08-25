@@ -17,6 +17,18 @@ data class SubscriptionRefreshPlan(
 )
 
 object SubscriptionRefreshPlanner {
+    fun planExisting(
+        subscriptions: List<Subscription>,
+        servers: List<ServerProfile>,
+        selectedServerId: String?,
+        subscription: Subscription,
+        report: SubscriptionParser.ParseReport,
+        updatedAt: Long,
+    ): SubscriptionRefreshPlan? {
+        if (subscriptions.none { it.id == subscription.id }) return null
+        return plan(subscriptions, servers, selectedServerId, subscription, report, updatedAt)
+    }
+
     fun plan(
         subscriptions: List<Subscription>,
         servers: List<ServerProfile>,

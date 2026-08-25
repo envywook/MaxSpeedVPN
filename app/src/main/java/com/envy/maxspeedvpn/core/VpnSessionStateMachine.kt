@@ -34,6 +34,7 @@ class VpnSessionStateMachine(
         state = when (val current = state) {
             VpnSessionState.Disconnected -> when (event) {
                 is VpnEvent.ConnectRequested -> VpnSessionState.Connecting(event.engine, event.server)
+                VpnEvent.DisconnectRequested -> return state
                 else -> invalid(event)
             }
 
@@ -44,6 +45,7 @@ class VpnSessionStateMachine(
                     current.server,
                 )
                 VpnEvent.DisconnectRequested -> VpnSessionState.Disconnecting(current.engine)
+                is VpnEvent.ConnectRequested -> VpnSessionState.Connecting(event.engine, event.server)
                 is VpnEvent.Failed -> VpnSessionState.Error(current.engine, event.message)
                 else -> invalid(event)
             }

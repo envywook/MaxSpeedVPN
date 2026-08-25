@@ -4,6 +4,7 @@ import android.content.Context
 import com.envy.maxspeedvpn.core.EngineKind
 import com.envy.maxspeedvpn.routing.RoutingMode
 import com.envy.maxspeedvpn.settings.VpnSettings
+import com.envy.maxspeedvpn.settings.SplitTunnelMode
 
 class MaxSpeedVpnBackupRepository(context: Context) {
     private val subscriptions = context.getSharedPreferences("subscriptions", Context.MODE_PRIVATE)
@@ -41,6 +42,10 @@ class MaxSpeedVpnBackupRepository(context: Context) {
             KEY_ENGINE to (settings.getString(KEY_ENGINE, EngineKind.XRAY.name) ?: EngineKind.XRAY.name),
             KEY_ROUTING_MODE to (settings.getString(KEY_ROUTING_MODE, RoutingMode.ALL.name) ?: RoutingMode.ALL.name),
             KEY_ROUTING_RULES to (settings.getString(KEY_ROUTING_RULES, "") ?: ""),
+            KEY_SMART_CONNECT to settings.getBoolean(KEY_SMART_CONNECT, false).toString(),
+            KEY_PING_ON_LAUNCH to settings.getBoolean(KEY_PING_ON_LAUNCH, true).toString(),
+            KEY_SPLIT_TUNNEL_MODE to (settings.getString(KEY_SPLIT_TUNNEL_MODE, SplitTunnelMode.OFF.name) ?: SplitTunnelMode.OFF.name),
+            KEY_SPLIT_TUNNEL_PACKAGES to settings.getStringSet(KEY_SPLIT_TUNNEL_PACKAGES, emptySet()).orEmpty().sorted().joinToString("\n"),
         ),
     )
 
@@ -61,6 +66,11 @@ class MaxSpeedVpnBackupRepository(context: Context) {
         val routingMode = values[KEY_ROUTING_MODE]?.let {
             runCatching { RoutingMode.valueOf(it) }.getOrElse { throw IllegalArgumentException("Некорректный режим маршрутизации") }
         } ?: RoutingMode.ALL
+        val smartConnect = values.strictBoolean(KEY_SMART_CONNECT, false)
+        val pingOnLaunch = values.strictBoolean(KEY_PING_ON_LAUNCH, true)
+        val splitTunnelMode = values[KEY_SPLIT_TUNNEL_MODE]?.let {
+            runCatching { SplitTunnelMode.valueOf(it) }.getOrElse { throw IllegalArgumentException("Некорректный режим раздельного туннелирования") }
+        } ?: SplitTunnelMode.OFF
         return VpnSettings.validate(
             mtu = values[KEY_MTU] ?: VpnSettings.DEFAULT_MTU.toString(),
             dnsServer = values[KEY_DNS] ?: VpnSettings.DEFAULT_DNS,
@@ -68,8 +78,15 @@ class MaxSpeedVpnBackupRepository(context: Context) {
             engine = engine,
             routingMode = routingMode,
             routingRules = values[KEY_ROUTING_RULES] ?: "",
+            smartConnectEnabled = smartConnect,
+            pingOnLaunchEnabled = pingOnLaunch,
+            splitTunnelMode = splitTunnelMode,
+            splitTunnelPackages = values[KEY_SPLIT_TUNNEL_PACKAGES].orEmpty().lineSequence().map(String::trim).filter(String::isNotEmpty).toSet(),
         )
     }
+
+    private fun Map<String, String>.strictBoolean(key: String, default: Boolean): Boolean = this[key]?.toBooleanStrictOrNull()
+        ?: if (key in this) throw IllegalArgumentException("Некорректное логическое значение настройки") else default
 
     private fun writeSettings(value: VpnSettings): Boolean = settings.edit().clear()
         .putInt(KEY_MTU, value.mtu)
@@ -78,6 +95,10 @@ class MaxSpeedVpnBackupRepository(context: Context) {
         .putString(KEY_ENGINE, value.engine.name)
         .putString(KEY_ROUTING_MODE, value.routingMode.name)
         .putString(KEY_ROUTING_RULES, value.routingRules)
+        .putBoolean(KEY_SMART_CONNECT, value.smartConnectEnabled)
+        .putBoolean(KEY_PING_ON_LAUNCH, value.pingOnLaunchEnabled)
+        .putString(KEY_SPLIT_TUNNEL_MODE, value.splitTunnelMode.name)
+        .putStringSet(KEY_SPLIT_TUNNEL_PACKAGES, value.splitTunnelPackages)
         .commit()
 
     private companion object {
@@ -91,6 +112,13 @@ class MaxSpeedVpnBackupRepository(context: Context) {
         const val KEY_ENGINE = "engine"
         const val KEY_ROUTING_MODE = "routing_mode"
         const val KEY_ROUTING_RULES = "routing_rules"
-        val SUPPORTED_SETTINGS = setOf(KEY_MTU, KEY_DNS, KEY_IPV6, KEY_ENGINE, KEY_ROUTING_MODE, KEY_ROUTING_RULES)
+        const val KEY_SMART_CONNECT = "smart_connect"
+        const val KEY_PING_ON_LAUNCH = "ping_on_launch"
+        const val KEY_SPLIT_TUNNEL_MODE = "split_tunnel_mode"
+        const val KEY_SPLIT_TUNNEL_PACKAGES = "split_tunnel_packages"
+        val SUPPORTED_SETTINGS = setOf(
+            KEY_MTU, KEY_DNS, KEY_IPV6, KEY_ENGINE, KEY_ROUTING_MODE, KEY_ROUTING_RULES,
+            KEY_SMART_CONNECT, KEY_PING_ON_LAUNCH, KEY_SPLIT_TUNNEL_MODE, KEY_SPLIT_TUNNEL_PACKAGES,
+        )
     }
 }

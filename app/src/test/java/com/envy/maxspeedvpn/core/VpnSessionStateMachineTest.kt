@@ -87,6 +87,27 @@ class VpnSessionStateMachineTest {
     }
 
     @Test
+    fun `disconnect before a queued connect starts is idempotent`() {
+        val published = mutableListOf<VpnSessionState>()
+        val machine = VpnSessionStateMachine(onStateChanged = published::add)
+
+        assertEquals(VpnSessionState.Disconnected, machine.dispatch(VpnEvent.DisconnectRequested))
+        assertEquals(emptyList<VpnSessionState>(), published)
+    }
+
+    @Test
+    fun `new connect request supersedes an in progress connection`() {
+        val next = VpnSessionServer("second", "vless", "second.example", 443)
+        val machine = VpnSessionStateMachine()
+        machine.dispatch(VpnEvent.ConnectRequested(EngineKind.XRAY))
+
+        assertEquals(
+            VpnSessionState.Connecting(EngineKind.SING_BOX, next),
+            machine.dispatch(VpnEvent.ConnectRequested(EngineKind.SING_BOX, next)),
+        )
+    }
+
+    @Test
     fun `service termination resets every active state`() {
         val activeStates = listOf(
             VpnSessionState.Connecting(EngineKind.XRAY),

@@ -6,8 +6,13 @@ import org.junit.Test
 
 class SubscriptionRefreshWorkerTest {
     @Test
-    fun `rescheduling keeps the existing periodic interval instead of postponing it`() {
-        assertEquals(ExistingPeriodicWorkPolicy.KEEP, subscriptionRefreshWorkPolicy())
+    fun `rescheduling updates legacy periodic interval in place`() {
+        assertEquals(ExistingPeriodicWorkPolicy.UPDATE, subscriptionRefreshWorkPolicy(intervalMigrationPending = true))
+    }
+
+    @Test
+    fun `routine scheduling keeps migrated work without postponing it`() {
+        assertEquals(ExistingPeriodicWorkPolicy.KEEP, subscriptionRefreshWorkPolicy(intervalMigrationPending = false))
     }
 
     @Test

@@ -210,4 +210,45 @@ class SubscriptionParserTest {
         assertEquals("socks-in", socks.getString("tag"))
         assertTrue(socks.getJSONObject("settings").getBoolean("udp"))
     }
+
+    @Test
+    fun `rejects explicit ports outside the valid range`() {
+        listOf(
+            "vmess://" + Base64.getEncoder().encodeToString(
+                """{"add":"example.com","port":"0","id":"11111111-1111-1111-1111-111111111111"}""".toByteArray(),
+            ),
+            "vless://11111111-1111-1111-1111-111111111111@example.com:0",
+            "trojan://secret@example.com:65536",
+            "hysteria2://secret@example.com:0",
+            "tuic://11111111-1111-1111-1111-111111111111:secret@example.com:65536",
+            "naive+https://user:pass@example.com:0",
+        ).forEach { uri ->
+            val report = SubscriptionParser.parseReport("subscription", uri)
+            assertTrue("Expected invalid port to be rejected: $uri", report.profiles.isEmpty())
+            assertEquals("Expected invalid port to be counted: $uri", 1, report.invalidCount)
+        }
+    }
+
+    @Test
+    fun `trojan password is decoded exactly once`() {
+        val percent = SubscriptionParser.parse(
+            "subscription",
+            "trojan://p%25ss@example.com:443#percent",
+        ).single()
+        val encodedSlash = SubscriptionParser.parse(
+            "subscription",
+            "trojan://p%252F@example.com:443#slash",
+        ).single()
+
+        assertEquals(
+            "p%ss",
+            JSONObject(percent.config).getJSONArray("outbounds").getJSONObject(0)
+                .getJSONObject("settings").getJSONArray("servers").getJSONObject(0).getString("password"),
+        )
+        assertEquals(
+            "p%2F",
+            JSONObject(encodedSlash.config).getJSONArray("outbounds").getJSONObject(0)
+                .getJSONObject("settings").getJSONArray("servers").getJSONObject(0).getString("password"),
+        )
+    }
 }

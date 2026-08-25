@@ -69,11 +69,29 @@ class VpnSessionCoordinatorTest {
         assertEquals(listOf("validate", "engine.start", "engine.stop"), calls)
     }
 
+    @Test fun `stop attempts both resources and becomes idempotent after failure`() = runTest {
+        val calls = mutableListOf<String>()
+        val coordinator = VpnSessionCoordinator(
+            engine = FakeEngine(calls, failStop = true),
+            transport = FakeTransport(calls),
+        )
+        coordinator.start("{}")
+
+        assertFailsWith<IllegalStateException> { coordinator.stop() }
+        coordinator.stop()
+
+        assertEquals(
+            listOf("validate", "engine.start", "transport.start", "transport.stop", "engine.stop"),
+            calls,
+        )
+    }
+
     private class FakeEngine(
         private val calls: MutableList<String>,
         private val result: ValidationResult = ValidationResult.Valid,
         override val startupOrder: EngineStartupOrder = EngineStartupOrder.ENGINE_FIRST,
         private val failStart: Boolean = false,
+        private val failStop: Boolean = false,
     ) : CoreEngine {
         override val kind = EngineKind.XRAY
         override suspend fun validate(config: String): ValidationResult { calls += "validate"; return result }
@@ -81,7 +99,10 @@ class VpnSessionCoordinatorTest {
             calls += "engine.start"
             if (failStart) error("engine failed after startup")
         }
-        override suspend fun stop() { calls += "engine.stop" }
+        override suspend fun stop() {
+            calls += "engine.stop"
+            if (failStop) error("engine stop failed")
+        }
     }
 
     private class FakeTransport(

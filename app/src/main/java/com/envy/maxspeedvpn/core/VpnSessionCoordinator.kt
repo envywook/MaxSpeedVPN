@@ -51,6 +51,7 @@ class VpnSessionCoordinator(
 
     suspend fun stop() = mutex.withLock {
         if (!active) return@withLock
+        active = false
         val firstStop: suspend () -> Unit
         val secondStop: suspend () -> Unit
         if (engine.startupOrder == EngineStartupOrder.ENGINE_FIRST) {
@@ -71,7 +72,6 @@ class VpnSessionCoordinator(
         } catch (secondFailure: Throwable) {
             if (failure == null) failure = secondFailure else failure.addSuppressed(secondFailure)
         }
-        active = false
         failure?.let { throw it }
     }
 }

@@ -47,6 +47,35 @@ class MaxSpeedVpnBackupCodecTest {
     }
 
     @Test
+    fun `round trips locally imported profiles without a subscription record`() {
+        val localServers = servers.replace("\"subscriptionId\":\"sub\"", "\"subscriptionId\":\"local-manual-import\"")
+        val localBackup = backup.copy(subscriptionsJson = "[]", serversJson = localServers)
+
+        assertEquals(localBackup, MaxSpeedVpnBackupCodec.decode(MaxSpeedVpnBackupCodec.encode(localBackup)))
+    }
+
+    @Test
+    fun `round trips all persisted VPN settings`() {
+        val completeSettings = mapOf(
+            "mtu" to "1400",
+            "dns_server" to "8.8.8.8",
+            "ipv6_enabled" to "false",
+            "engine" to "SING_BOX",
+            "routing_mode" to "CUSTOM",
+            "routing_rules" to "domain:example.com",
+            "smart_connect" to "true",
+            "ping_on_launch" to "false",
+            "split_tunnel_mode" to "ONLY_SELECTED",
+            "split_tunnel_packages" to "com.example.one\ncom.example.two",
+        )
+
+        assertEquals(
+            completeSettings,
+            MaxSpeedVpnBackupCodec.decode(MaxSpeedVpnBackupCodec.encode(backup.copy(vpnSettings = completeSettings))).vpnSettings,
+        )
+    }
+
+    @Test
     fun `rejects duplicate and broken references`() {
         val duplicateSubscriptions = "[$subscriptions".replace("[[", "[").removeSuffix("]") + "," + subscriptions.removePrefix("[")
         assertFailsWith<Exception> { decodeWith(duplicateSubscriptions, servers) }

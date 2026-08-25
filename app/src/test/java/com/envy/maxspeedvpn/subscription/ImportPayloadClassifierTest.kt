@@ -117,6 +117,15 @@ class ImportPayloadClassifierTest {
     }
 
     @Test
+    fun `rejects Mieru outbound with both singular and ranged ports`() {
+        assertFailsWith<IllegalArgumentException> {
+            ImportPayloadClassifier.classify(
+                """{"outbounds":[{"type":"mieru","server":"mieru.example","server_port":2012,"server_ports":["2012-2014"],"transport":"TCP","username":"fixture-user","password":"fixture-password"}]}""",
+            )
+        }
+    }
+
+    @Test
     fun `allows a larger document only through the explicit file import limit`() {
         val document = """{"outbounds":[{"type":"naive","tag":"naive","server":"naive.example","server_port":443,"username":"fixture-user","password":"fixture-password","tls":{"enabled":true}}],"padding":"${"x".repeat(4_100)}"}"""
 

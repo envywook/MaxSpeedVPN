@@ -64,6 +64,9 @@ object ImportPayloadClassifier {
                 if (type !in setOf("naive", "mieru")) continue
                 val address = outbound.optString("server").takeIf(String::isNotBlank)
                     ?: error("$type outbound has no server")
+                require(!(outbound.has("server_port") && outbound.has("server_ports"))) {
+                    "$type outbound has conflicting ports"
+                }
                 val port = when {
                     outbound.has("server_port") -> outbound.optInt("server_port").also {
                         require(it in 1..65535) { "$type outbound has invalid port" }
