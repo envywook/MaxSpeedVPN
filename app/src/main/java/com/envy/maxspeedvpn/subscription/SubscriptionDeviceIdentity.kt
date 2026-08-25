@@ -8,6 +8,12 @@ import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.security.SecureRandom
 
+private val REMNAWAVE_HWID_REGEX = Regex("^[a-zA-Z0-9=-]{10,64}$")
+
+internal fun isRemnawaveCompatibleHwid(value: String): Boolean = REMNAWAVE_HWID_REGEX.matches(value)
+
+internal fun remnawaveCompatibleHwid(value: String): String = value.replace('_', '=')
+
 /** Stable, app-scoped identity used by Remnawave-compatible HWID subscription limits. */
 class SubscriptionDeviceIdentity(private val context: Context) {
     data class Headers(
@@ -31,11 +37,14 @@ class SubscriptionDeviceIdentity(private val context: Context) {
     private fun getOrCreateHwid(scope: String): String {
         val preferences = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
         val key = "$KEY_HWID.${digest(scope).take(16)}"
-        preferences.getString(key, null)?.takeIf(HWID_REGEX::matches)?.let { return it }
+        preferences.getString(key, null)?.takeIf(::isRemnawaveCompatibleHwid)?.let { return it }
         val androidId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
             ?.takeIf { it.isNotBlank() && it != "9774d56d682e549c" }
-        val generated = androidId?.let { digest("${context.packageName}:$scope:$it") } ?: Base64.encodeToString(
-            ByteArray(24).also(SecureRandom()::nextBytes), Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING,
+        val generated = remnawaveCompatibleHwid(
+            androidId?.let { digest("${context.packageName}:$scope:$it") } ?: Base64.encodeToString(
+                ByteArray(24).also(SecureRandom()::nextBytes),
+                Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING,
+            ),
         )
         check(preferences.edit().putString(key, generated).commit()) { "Device identity could not be persisted" }
         return generated
@@ -49,6 +58,5 @@ class SubscriptionDeviceIdentity(private val context: Context) {
     private companion object {
         const val PREFERENCES = "subscription_device_identity"
         const val KEY_HWID = "hwid"
-        val HWID_REGEX = Regex("^[a-zA-Z0-9=-]{10,64}$")
     }
 }
